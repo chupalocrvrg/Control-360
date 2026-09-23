@@ -5,6 +5,16 @@ import admin from "firebase-admin";
 import { Resend } from "resend";
 import dotenv from "dotenv";
 import fs from "fs";
+import crypto from "crypto";
+
+// Timing-safe string comparison to mitigate side-channel timing attacks
+function safeCompare(a: string | undefined | null, b: string | undefined | null): boolean {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
 
 // Load environment variables
 dotenv.config();
@@ -346,9 +356,12 @@ async function startServer() {
 
       // Restrict access strictly using the CRON_SECRET or verified admin authentication
       if (cronSecret) {
-        const isAuthHeaderMatch = authorizationHeader === `Bearer ${cronSecret}`;
-        const isQuerySecretMatch = querySecret === cronSecret;
-        const isCustomHeaderMatch = req.headers['x-cron-secret'] === cronSecret;
+        const querySecretStr = typeof querySecret === 'string' ? querySecret : undefined;
+        const customHeaderSecret = typeof req.headers['x-cron-secret'] === 'string' ? req.headers['x-cron-secret'] : undefined;
+
+        const isAuthHeaderMatch = safeCompare(authorizationHeader, `Bearer ${cronSecret}`);
+        const isQuerySecretMatch = safeCompare(querySecretStr, cronSecret);
+        const isCustomHeaderMatch = safeCompare(customHeaderSecret, cronSecret);
 
         if (!isAuthHeaderMatch && !isQuerySecretMatch && !isCustomHeaderMatch) {
           return res.status(401).json({ error: "Unauthorized: Invalid CRON_SECRET." });

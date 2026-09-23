@@ -11,6 +11,16 @@ export interface ChangelogRelease {
 
 export const staticChangelog: ChangelogRelease[] = [
   {
+    version: "5.45.2",
+    date: "2026-09-23",
+    changes: [
+      "Saneamiento y Seguridad de Datos: Se eliminó el archivo de volcado local dump_raw.json que contenía datos reales de sesión y auditoría.",
+      "Limpieza de Artefactos de Raíz: Se removieron más de 20 scripts temporales y de depuración sueltos en el directorio raíz.",
+      "Protección en .gitignore: Se actualizaron las reglas de exclusión para bloquear de forma permanente volcados de base de datos, scripts de prueba y parches temporales.",
+      "Mitigación de Ataques de Temporización: Se refactorizó la verificación del CRON_SECRET en el servidor Express para utilizar la función crypto.timingSafeEqual."
+    ]
+  },
+  {
     version: "5.45.1",
     date: "2026-09-23",
     changes: [

@@ -6,3 +6,23 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Data dumps and sensitive local session backups
+dump_raw.json
+*.dump
+*.json.dump
+
+# Temporary dev & debug scripts
+db_test.js
+debug-search.py
+fix-*.py
+fix-*.ts
+update-*.py
+version_bump*.py
+patch.py
+*.patch
+extract_clauses.py
+refactor-clauses.py
+rename-constant.py
+add-changelog.py
+format.py
