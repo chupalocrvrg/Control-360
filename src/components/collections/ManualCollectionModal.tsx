@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
-import { addDoc, updateDoc, doc, collection, Timestamp } from 'firebase/firestore';
+import { addDoc, updateDoc, doc, collection, Timestamp, query, where, getDocs } from 'firebase/firestore';
 import { X, Save, Calendar, FileText, User } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotification } from '../../contexts/NotificationContext';
@@ -47,7 +47,7 @@ export function ManualCollectionModal({
   defaultMonth
 }: ManualCollectionModalProps) {
   const { user, profile } = useAuth();
-  const { showToast } = useNotification();
+  const { showToast, showConfirm } = useNotification();
   const currentEnterpriseId = profile?.enterpriseId || user?.uid;
 
   const [formData, setFormData] = useState({
@@ -117,6 +117,40 @@ export function ManualCollectionModal({
     try {
       setIsSubmitting(true);
       const targetEntId = currentEnterpriseId || user.uid;
+
+      // 1. Check for potential duplicate range for the same collector (only if receipts are used)
+      if (!formData.noReceipt) {
+        const qDup = query(
+          collection(db, 'collections'), 
+          where('enterpriseId', '==', targetEntId),
+          where('employeeId', '==', formData.employeeId)
+        );
+        const snapDup = await getDocs(qDup);
+        const existingCollections = snapDup.docs
+          .map(d => ({ id: d.id, ...d.data() } as any))
+          .filter(c => !editingCollection || c.id !== editingCollection.id);
+
+        const newStart = formData.initialReceipt.toUpperCase();
+        const newEnd = formData.finalReceipt.toUpperCase();
+
+        const duplicate = existingCollections.find(c => 
+          (c.initialReceipt === newStart && c.finalReceipt === newEnd) ||
+          (c.initialReceipt === newStart) ||
+          (c.finalReceipt === newEnd)
+        );
+
+        if (duplicate) {
+          const proceed = await showConfirm(
+            'Posible Cobranza Duplicada', 
+            `Ya existe un registro de cobranza para este cobrador con recibos similares (${duplicate.initialReceipt} - ${duplicate.finalReceipt}). ¿Desea continuar de todas formas?`,
+            { type: 'warning' }
+          );
+          if (!proceed) {
+            setIsSubmitting(false);
+            return;
+          }
+        }
+      }
 
       const payload = {
         employeeId: formData.employeeId,

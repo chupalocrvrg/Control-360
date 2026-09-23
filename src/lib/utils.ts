@@ -43,6 +43,99 @@ export function formatCurrency(amount: number, currencyCode: string = 'USD'): st
 }
 
 /**
+ * Converts a numeric amount to formal Spanish words with cents representation.
+ * Example: 1395.00 -> "UN MIL TRESCIENTOS NOVENTA Y CINCO CON 00/100"
+ */
+export function numberToSpanishWords(amount: number): string {
+  if (isNaN(amount) || amount === null || amount === undefined) return 'CERO CON 00/100';
+
+  const absAmount = Math.abs(amount);
+  const entero = Math.floor(absAmount);
+  const centavos = Math.round((absAmount - entero) * 100);
+  const centavosStr = centavos.toString().padStart(2, '0') + '/100';
+
+  if (entero === 0) {
+    return `CERO CON ${centavosStr}`;
+  }
+
+  const unidades = ['', 'UN', 'DOS', 'TRES', 'CUATRO', 'CINCO', 'SEIS', 'SIETE', 'OCHO', 'NUEVE'];
+  const decenas = ['', 'DIEZ', 'VEINTE', 'TREINTA', 'CUARENTA', 'CINCUENTA', 'SESENTA', 'SETENTA', 'OCHENTA', 'NOVENTA'];
+  const diez_veinte = [
+    'DIEZ', 'ONCE', 'DOCE', 'TRECE', 'CATORCE', 'QUINCE', 'DIECISÉIS', 'DIECISIETE', 'DIECIOCHO', 'DIECINUEVE', 'VEINTE',
+    'VEINTIUNO', 'VEINTIDÓS', 'VEINTITRÉS', 'VEINTICUATRO', 'VEINTICINCO', 'VEINTISÉIS', 'VEINTISIETE', 'VEINTIOCHO', 'VEINTINUEVE'
+  ];
+  const centenas = [
+    '', 'CIENTO', 'DOSCIENTOS', 'TRESCIENTOS', 'CUATROCIENTOS', 'QUINIENTOS',
+    'SEISCIENTOS', 'SETECIENTOS', 'OCHOCIENTOS', 'NOVECIENTOS'
+  ];
+
+  function convertGroup(n: number): string {
+    let output = '';
+    if (n === 100) return 'CIEN';
+    
+    const c = Math.floor(n / 100);
+    const d = Math.floor((n % 100) / 10);
+    const u = n % 10;
+    const du = n % 100;
+
+    if (c > 0) {
+      output += centenas[c] + ' ';
+    }
+
+    if (du >= 10 && du <= 29) {
+      output += diez_veinte[du - 10] + ' ';
+    } else {
+      if (d > 0) {
+        output += decenas[d];
+        if (u > 0) {
+          output += ' Y ' + unidades[u] + ' ';
+        } else {
+          output += ' ';
+        }
+      } else if (u > 0) {
+        output += unidades[u] + ' ';
+      }
+    }
+
+    return output.trim();
+  }
+
+  function convert(n: number): string {
+    if (n === 0) return 'CERO';
+    let words = '';
+
+    const millions = Math.floor(n / 1000000);
+    const thousands = Math.floor((n % 1000000) / 1000);
+    const remainder = n % 1000;
+
+    if (millions > 0) {
+      if (millions === 1) {
+        words += 'UN MILLÓN ';
+      } else {
+        words += convertGroup(millions) + ' MILLONES ';
+      }
+    }
+
+    if (thousands > 0) {
+      if (thousands === 1) {
+        words += 'UN MIL ';
+      } else {
+        words += convertGroup(thousands) + ' MIL ';
+      }
+    }
+
+    if (remainder > 0) {
+      words += convertGroup(remainder) + ' ';
+    }
+
+    return words.trim();
+  }
+
+  const resultWords = convert(entero);
+  return `${resultWords} CON ${centavosStr}`;
+}
+
+/**
  * Safely rounds any financial float to exactly 2 decimal places to avoid standard IEEE-754 binary representation float errors.
  */
 export function roundToTwo(amount: number): number {

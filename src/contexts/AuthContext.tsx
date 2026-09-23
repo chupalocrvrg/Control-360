@@ -11,6 +11,8 @@ import { isSuperAdminEmail } from '../lib/utils';
 export interface UserProfile {
   uid?: string;
   name: string;
+  businessName?: string;
+  commercialName?: string;
   ruc?: string;
   phone?: string;
   email: string;
@@ -23,6 +25,9 @@ export interface UserProfile {
   createdAt: string;
   enterpriseId?: string;
   photoUrl?: string;
+  country?: string;
+  province?: string;
+  canton?: string;
   address?: string;
   hasCompletedOnboarding?: boolean;
   termsAcceptedAt?: string;

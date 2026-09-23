@@ -30,6 +30,18 @@ export function normalizeArticleData(data: any, id: string): any {
     brand: data?.brand || '',
     model: data?.model || '',
     barcode: data?.barcode || '',
+    year: data?.year || '',
+    origin: data?.origin || '',
+    cylinderCapacity: data?.cylinderCapacity || '',
+    tonnage: data?.tonnage || '',
+    passengers: data?.passengers || '',
+    color: data?.color || '',
+    camv: data?.camv || '',
+    chassis: data?.chassis || '',
+    engine: data?.engine || '',
+    vehicleClass: data?.vehicleClass || '',
+    vehicleType: data?.vehicleType || '',
+    passToInvoiceComment: !!data?.passToInvoiceComment,
     seriesList: Array.isArray(data?.seriesList) ? data.seriesList : []
   };
 }
@@ -913,6 +925,18 @@ export async function saveArticleWithStockTransaction(
     requiresSeries: boolean;
     seriesList: string[];
     barcode: string;
+    year?: string;
+    origin?: string;
+    cylinderCapacity?: string;
+    tonnage?: string;
+    passengers?: string;
+    color?: string;
+    camv?: string;
+    chassis?: string;
+    engine?: string;
+    vehicleClass?: string;
+    vehicleType?: string;
+    passToInvoiceComment?: boolean;
     minStockAlert: number;
     initialQuantity: number;
     initialWarehouseId: string;
@@ -989,6 +1013,18 @@ export async function saveArticleWithStockTransaction(
         requiresSeries: articleData.requiresSeries,
         seriesList: articleData.seriesList,
         barcode: articleData.barcode,
+        year: articleData.year || '',
+        origin: articleData.origin || '',
+        cylinderCapacity: articleData.cylinderCapacity || '',
+        tonnage: articleData.tonnage || '',
+        passengers: articleData.passengers || '',
+        color: articleData.color || '',
+        camv: articleData.camv || '',
+        chassis: articleData.chassis || '',
+        engine: articleData.engine || '',
+        vehicleClass: articleData.vehicleClass || '',
+        vehicleType: articleData.vehicleType || '',
+        passToInvoiceComment: !!articleData.passToInvoiceComment,
         minStockAlert: articleData.minStockAlert,
         quantity: articleData.initialQuantity,
         userId: enterpriseId,

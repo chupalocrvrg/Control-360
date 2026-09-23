@@ -11,6 +11,7 @@ import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
 import { Save, Plus, Trash2, Shield, Globe, Palette, Monitor, Calculator, Sun, Moon, PaintBucket, Building, Building2, User, Database, Download, Upload, AlignLeft, AlignRight, ArrowUp, ArrowDown, Type, Loader2, CheckCircle2, Info, Lock, ShieldCheck, Mail, FileText, AlertCircle, Fingerprint, ArrowLeft, KeyRound, ArrowRight, ShieldAlert, Users, ArrowLeftRight, Clock, Bell } from 'lucide-react';
 import TermsAndConditionsInfo from '../components/TermsAndConditionsInfo';
 import { cn, isSuperAdminEmail } from '../lib/utils';
+import { ECUADOR_PROVINCES } from '../lib/ecuadorLocations';
 import * as XLSX from 'xlsx';
 import { logAudit, AuditAction } from '../lib/audit';
 import * as OTPAuth from 'otpauth';
@@ -38,7 +39,17 @@ export default function Settings() {
   const [verifyingSettingsPin, setVerifyingSettingsPin] = useState(false);
 
   // Profile data state
-  const [profileData, setProfileData] = useState({ name: '', phone: '', photoUrl: '', address: '' });
+  const [profileData, setProfileData] = useState({ 
+    name: '', 
+    businessName: '',
+    commercialName: '',
+    phone: '', 
+    photoUrl: '', 
+    country: 'Ecuador',
+    province: '',
+    canton: '',
+    address: '' 
+  });
   const [docType, setDocType] = useState<'CEDULA' | 'RUC'>('CEDULA');
   const [docNumber, setDocNumber] = useState('');
 
@@ -160,8 +171,13 @@ export default function Settings() {
     if (user && profile) {
       setProfileData({ 
         name: profile.name || '', 
+        businessName: profile.businessName || '',
+        commercialName: profile.commercialName || '',
         phone: profile.phone || '', 
         photoUrl: profile.photoUrl || '',
+        country: profile.country || 'Ecuador',
+        province: profile.province || '',
+        canton: profile.canton || '',
         address: profile.address || ''
       });
       const rucVal = (profile.ruc || '').trim();
@@ -219,8 +235,9 @@ export default function Settings() {
   };
 
   const handleSaveProfile = async () => {
-    if (!profileData.name.trim()) {
-      showToast("El nombre o razón social es requerido", "warning");
+    const mainName = profileData.name.trim() || profileData.commercialName.trim() || profileData.businessName.trim();
+    if (!mainName) {
+      showToast("El Nombre de la empresa o Razón Social es requerido", "warning");
       return;
     }
 
@@ -240,9 +257,14 @@ export default function Settings() {
     setLoading(true);
     try {
       await updateProfile({
-        name: profileData.name.trim(),
+        name: mainName,
+        businessName: profileData.businessName.trim(),
+        commercialName: profileData.commercialName.trim(),
         phone: profileData.phone.trim(),
         ruc: cleanDoc,
+        country: profileData.country.trim() || 'Ecuador',
+        province: profileData.province.trim(),
+        canton: profileData.canton.trim(),
         address: profileData.address.trim(),
         photoUrl: profileData.photoUrl
       });
@@ -1011,10 +1033,44 @@ export default function Settings() {
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Nombre o Razón Social */}
+                  {/* Razón Social (Nombre Legal) */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">
+                      1. Razón Social (Nombre Legal / Jurídico)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={profileData.businessName}
+                        onChange={(e) => setProfileData({ ...profileData, businessName: e.target.value })}
+                        className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-100 dark:border-neutral-800 rounded-2xl p-4 text-neutral-900 dark:text-neutral-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all pl-12"
+                        placeholder="Ej: INVERSIONES Y COMERCIO S.A.S."
+                      />
+                      <Building className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" />
+                    </div>
+                  </div>
+
+                  {/* Nombre Comercial / Nombre de la Empresa */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">
+                      2. Nombre Comercial / Marca de la Empresa
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={profileData.commercialName}
+                        onChange={(e) => setProfileData({ ...profileData, commercialName: e.target.value })}
+                        className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-100 dark:border-neutral-800 rounded-2xl p-4 text-neutral-900 dark:text-neutral-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all pl-12"
+                        placeholder="Ej: ELECTRO & CRÉDITOS EL VALLE"
+                      />
+                      <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" />
+                    </div>
+                  </div>
+
+                  {/* Nombre del Representante / Contacto Principal */}
                   <div className="space-y-2 md:col-span-2">
                     <label className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">
-                      Nombre o Razón Social <span className="text-red-500">*</span>
+                      3. Nombre del Representante Legal o Titular Propietario <span className="text-red-500">*</span>
                     </label>
                     <div className="relative">
                       <input
@@ -1023,9 +1079,9 @@ export default function Settings() {
                         value={profileData.name}
                         onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
                         className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-100 dark:border-neutral-800 rounded-2xl p-4 text-neutral-900 dark:text-neutral-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all pl-12"
-                        placeholder="Ej: Inversiones Global S.A. / Juan Pérez"
+                        placeholder="Ej: Juan Carlos Pérez Gómez"
                       />
-                      <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" />
+                      <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" />
                     </div>
                   </div>
 
@@ -1033,7 +1089,7 @@ export default function Settings() {
                   <div className="space-y-3 md:col-span-2 p-5 bg-neutral-50/80 dark:bg-neutral-800/40 rounded-2xl border border-neutral-100 dark:border-neutral-800">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <label className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">
-                        Documento de Identificación (Cédula / RUC)
+                        Documento de Identificación de la Empresa / Acreedor (Cédula / RUC)
                       </label>
                       <div className="inline-flex p-1 bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-700">
                         <button
@@ -1107,6 +1163,95 @@ export default function Settings() {
                     </div>
                   </div>
 
+                  {/* Ubicación Geográfica: País, Provincia y Cantón */}
+                  <div className="space-y-4 md:col-span-2 p-5 bg-neutral-50/80 dark:bg-neutral-800/40 rounded-2xl border border-neutral-100 dark:border-neutral-800">
+                    <label className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">
+                      Ubicación Geográfica Jurídica (País, Provincia y Cantón)
+                    </label>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {/* País */}
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 block">País</label>
+                        <input
+                          type="text"
+                          value={profileData.country}
+                          onChange={(e) => setProfileData({ ...profileData, country: e.target.value })}
+                          className="w-full bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-xl p-3 text-sm text-neutral-900 dark:text-neutral-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                          placeholder="Ecuador"
+                        />
+                      </div>
+
+                      {/* Provincia */}
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 block">Provincia</label>
+                        <select
+                          value={profileData.province}
+                          onChange={(e) => {
+                            const newProv = e.target.value;
+                            const provObj = ECUADOR_PROVINCES.find(p => p.name === newProv);
+                            const defaultCanton = provObj && provObj.cantons.length > 0 ? provObj.cantons[0] : '';
+                            setProfileData({
+                              ...profileData,
+                              province: newProv,
+                              canton: provObj?.cantons.includes(profileData.canton) ? profileData.canton : defaultCanton
+                            });
+                          }}
+                          className="w-full bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-xl p-3 text-sm text-neutral-900 dark:text-neutral-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                        >
+                          <option value="">-- Seleccionar Provincia --</option>
+                          {ECUADOR_PROVINCES.map((prov) => (
+                            <option key={prov.name} value={prov.name}>
+                              {prov.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Cantón */}
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 block">Cantón / Jurisdicción</label>
+                        {profileData.province ? (
+                          <select
+                            value={profileData.canton}
+                            onChange={(e) => setProfileData({ ...profileData, canton: e.target.value })}
+                            className="w-full bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-xl p-3 text-sm text-neutral-900 dark:text-neutral-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                          >
+                            <option value="">-- Seleccionar Cantón --</option>
+                            {(ECUADOR_PROVINCES.find(p => p.name === profileData.province)?.cantons || []).map((canton) => (
+                              <option key={canton} value={canton}>
+                                {canton}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            value={profileData.canton}
+                            onChange={(e) => setProfileData({ ...profileData, canton: e.target.value })}
+                            className="w-full bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-xl p-3 text-sm text-neutral-900 dark:text-neutral-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                            placeholder="Ej: La Troncal"
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Dirección de la Casa Comercial */}
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Dirección Exacta de la Casa Comercial</label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={profileData.address}
+                        onChange={(e) => setProfileData({ ...profileData, address: e.target.value })}
+                        className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-100 dark:border-neutral-800 rounded-2xl p-4 text-neutral-900 dark:text-neutral-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all pl-12"
+                        placeholder="Ej: Av. Principal y Calle Secundaria, Edificio Sky, Local 4"
+                      />
+                      <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" />
+                    </div>
+                  </div>
+
                   {/* Teléfono Móvil */}
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Teléfono / Contacto</label>
@@ -1136,21 +1281,6 @@ export default function Settings() {
                         className="w-full bg-neutral-100/70 dark:bg-neutral-800/50 border border-neutral-200/60 dark:border-neutral-800 rounded-2xl p-4 text-neutral-500 dark:text-neutral-400 cursor-not-allowed outline-none pl-12"
                       />
                       <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" />
-                    </div>
-                  </div>
-
-                  {/* Dirección de la Casa Comercial */}
-                  <div className="space-y-2 md:col-span-2">
-                    <label className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">Dirección de la Casa Comercial</label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={profileData.address}
-                        onChange={(e) => setProfileData({ ...profileData, address: e.target.value })}
-                        className="w-full bg-neutral-50 dark:bg-neutral-800 border border-neutral-100 dark:border-neutral-800 rounded-2xl p-4 text-neutral-900 dark:text-neutral-100 focus:ring-2 focus:ring-indigo-500 outline-none transition-all pl-12"
-                        placeholder="Ej: Av. Principal y Calle Secundaria, Edificio Sky, Local 4"
-                      />
-                      <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" />
                     </div>
                   </div>
                 </div>

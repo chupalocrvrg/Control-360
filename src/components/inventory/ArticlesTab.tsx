@@ -36,6 +36,18 @@ export default function ArticlesTab() {
     brand: '',
     model: '',
     barcode: '',
+    year: '',
+    origin: '',
+    cylinderCapacity: '',
+    tonnage: '',
+    passengers: '',
+    color: '',
+    camv: '',
+    chassis: '',
+    engine: '',
+    vehicleClass: '',
+    vehicleType: '',
+    passToInvoiceComment: false,
     requiresSeries: false,
     seriesInput: '',
     minStockAlert: "5" as string | number,
@@ -105,6 +117,18 @@ export default function ArticlesTab() {
         brand: article.brand || '',
         model: article.model || '',
         barcode: article.barcode || '',
+        year: article.year || '',
+        origin: article.origin || '',
+        cylinderCapacity: article.cylinderCapacity || '',
+        tonnage: article.tonnage || '',
+        passengers: article.passengers || '',
+        color: article.color || '',
+        camv: article.camv || '',
+        chassis: article.chassis || '',
+        engine: article.engine || '',
+        vehicleClass: article.vehicleClass || '',
+        vehicleType: article.vehicleType || '',
+        passToInvoiceComment: !!article.passToInvoiceComment,
         minStockAlert: article.minStockAlert ?? 5,
         initialQuantity: 0,
         initialWarehouseId: warehouses[0]?.id || '',
@@ -118,6 +142,18 @@ export default function ArticlesTab() {
         brand: '',
         model: '',
         barcode: '',
+        year: '',
+        origin: '',
+        cylinderCapacity: '',
+        tonnage: '',
+        passengers: '',
+        color: '',
+        camv: '',
+        chassis: '',
+        engine: '',
+        vehicleClass: '',
+        vehicleType: '',
+        passToInvoiceComment: false,
         minStockAlert: 5,
         initialQuantity: 0,
         initialWarehouseId: warehouses[0]?.id || '',
@@ -234,6 +270,18 @@ if (!formData.category.trim()) {
           category: formData.category.trim(),
           brand: formData.brand.trim(),
           model: formData.model.trim(),
+          year: formData.year.trim(),
+          origin: formData.origin.trim(),
+          cylinderCapacity: formData.cylinderCapacity.trim(),
+          tonnage: formData.tonnage.trim(),
+          passengers: formData.passengers.trim(),
+          color: formData.color.trim(),
+          camv: formData.camv.trim(),
+          chassis: formData.chassis.trim(),
+          engine: formData.engine.trim(),
+          vehicleClass: formData.vehicleClass.trim(),
+          vehicleType: formData.vehicleType.trim(),
+          passToInvoiceComment: formData.passToInvoiceComment,
           requiresSeries: formData.requiresSeries,
           seriesList: seriesArray,
           barcode: formData.barcode.trim(),
@@ -247,6 +295,18 @@ if (!formData.category.trim()) {
             brand: formData.brand.trim(),
             model: formData.model.trim(),
             computedName,
+            year: formData.year.trim(),
+            origin: formData.origin.trim(),
+            cylinderCapacity: formData.cylinderCapacity.trim(),
+            tonnage: formData.tonnage.trim(),
+            passengers: formData.passengers.trim(),
+            color: formData.color.trim(),
+            camv: formData.camv.trim(),
+            chassis: formData.chassis.trim(),
+            engine: formData.engine.trim(),
+            vehicleClass: formData.vehicleClass.trim(),
+            vehicleType: formData.vehicleType.trim(),
+            passToInvoiceComment: formData.passToInvoiceComment,
             requiresSeries: formData.requiresSeries,
             seriesList: seriesArray,
             barcode: formData.barcode.trim(),
@@ -767,6 +827,150 @@ if (!formData.category.trim()) {
                     />
                   </div>
                 </div>
+
+                {/* Vehicle Specific Fields (Visible for Motos) */}
+                {formData.category.toLowerCase().includes('moto') && (
+                  <div className="bg-neutral-50 dark:bg-neutral-800/40 p-6 rounded-3xl border border-neutral-200 dark:border-neutral-800 space-y-4 animate-in slide-in-from-top-2 duration-300">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-1.5 h-5 bg-indigo-600 rounded-full" />
+                      <h4 className="text-xs font-black text-neutral-900 dark:text-neutral-50 uppercase tracking-widest">Detalles del Vehículo (Kardex Técnico)</h4>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                      {/* Year */}
+                      <div>
+                        <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest block mb-1">Año</label>
+                        <input
+                          type="text"
+                          placeholder="2024"
+                          value={formData.year}
+                          onChange={(e) => setFormData({ ...formData, year: e.target.value })}
+                          className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs outline-none focus:border-indigo-500 transition-all uppercase"
+                        />
+                      </div>
+                      {/* Origin */}
+                      <div>
+                        <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest block mb-1">Procedencia</label>
+                        <input
+                          type="text"
+                          placeholder="China"
+                          value={formData.origin}
+                          onChange={(e) => setFormData({ ...formData, origin: e.target.value })}
+                          className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs outline-none focus:border-indigo-500 transition-all uppercase"
+                        />
+                      </div>
+                      {/* Cylinder Capacity */}
+                      <div>
+                        <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest block mb-1">Cilindraje</label>
+                        <input
+                          type="text"
+                          placeholder="150"
+                          value={formData.cylinderCapacity}
+                          onChange={(e) => setFormData({ ...formData, cylinderCapacity: e.target.value })}
+                          className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs outline-none focus:border-indigo-500 transition-all uppercase"
+                        />
+                      </div>
+                      {/* Tonnage */}
+                      <div>
+                        <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest block mb-1">Tonelaje</label>
+                        <input
+                          type="text"
+                          placeholder="0.25"
+                          value={formData.tonnage}
+                          onChange={(e) => setFormData({ ...formData, tonnage: e.target.value })}
+                          className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs outline-none focus:border-indigo-500 transition-all uppercase"
+                        />
+                      </div>
+                      {/* Passengers */}
+                      <div>
+                        <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest block mb-1">Pasajeros</label>
+                        <input
+                          type="text"
+                          placeholder="2"
+                          value={formData.passengers}
+                          onChange={(e) => setFormData({ ...formData, passengers: e.target.value })}
+                          className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs outline-none focus:border-indigo-500 transition-all uppercase"
+                        />
+                      </div>
+                      {/* Color */}
+                      <div>
+                        <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest block mb-1">Color</label>
+                        <input
+                          type="text"
+                          placeholder="NEGRO"
+                          value={formData.color}
+                          onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                          className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs outline-none focus:border-indigo-500 transition-all uppercase"
+                        />
+                      </div>
+                      {/* CAMV */}
+                      <div className="sm:col-span-1">
+                        <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest block mb-1">CAMV</label>
+                        <input
+                          type="text"
+                          placeholder="S00242993"
+                          value={formData.camv}
+                          onChange={(e) => setFormData({ ...formData, camv: e.target.value })}
+                          className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs outline-none focus:border-indigo-500 transition-all uppercase"
+                        />
+                      </div>
+                      {/* Chasis */}
+                      <div className="sm:col-span-1">
+                        <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest block mb-1">Chasis</label>
+                        <input
+                          type="text"
+                          placeholder="LEAPCK..."
+                          value={formData.chassis}
+                          onChange={(e) => setFormData({ ...formData, chassis: e.target.value })}
+                          className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs outline-none focus:border-indigo-500 transition-all uppercase"
+                        />
+                      </div>
+                      {/* Motor */}
+                      <div className="sm:col-span-1">
+                        <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest block mb-1">Motor</label>
+                        <input
+                          type="text"
+                          placeholder="162FMJ..."
+                          value={formData.engine}
+                          onChange={(e) => setFormData({ ...formData, engine: e.target.value })}
+                          className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs outline-none focus:border-indigo-500 transition-all uppercase"
+                        />
+                      </div>
+                      {/* Clase */}
+                      <div className="sm:col-span-1">
+                        <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest block mb-1">Clase</label>
+                        <input
+                          type="text"
+                          placeholder="MOTOCICLETA"
+                          value={formData.vehicleClass}
+                          onChange={(e) => setFormData({ ...formData, vehicleClass: e.target.value })}
+                          className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs outline-none focus:border-indigo-500 transition-all uppercase"
+                        />
+                      </div>
+                      {/* Tipo */}
+                      <div className="sm:col-span-1">
+                        <label className="text-[9px] font-black text-neutral-500 uppercase tracking-widest block mb-1">Tipo</label>
+                        <input
+                          type="text"
+                          placeholder="PASEO"
+                          value={formData.vehicleType}
+                          onChange={(e) => setFormData({ ...formData, vehicleType: e.target.value })}
+                          className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs outline-none focus:border-indigo-500 transition-all uppercase"
+                        />
+                      </div>
+                    </div>
+                    
+                    <label className="flex items-center gap-2 cursor-pointer pt-2 group">
+                      <input
+                        type="checkbox"
+                        checked={formData.passToInvoiceComment}
+                        onChange={(e) => setFormData({ ...formData, passToInvoiceComment: e.target.checked })}
+                        className="w-4 h-4 text-indigo-600 rounded border-neutral-300 focus:ring-indigo-500 transition-all"
+                      />
+                      <span className="text-[10px] font-black text-neutral-700 dark:text-neutral-300 uppercase tracking-widest group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">Pasar a Comentario de Factura</span>
+                    </label>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Número de Serie */}

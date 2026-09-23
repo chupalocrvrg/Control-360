@@ -11,6 +11,96 @@ export interface ChangelogRelease {
 
 export const staticChangelog: ChangelogRelease[] = [
   {
+    version: "5.45.0",
+    date: "2026-09-23",
+    changes: [
+      "Restauración del Reporte Detallado de Cobranza: Se integró una nueva sección de 'Rendimiento Individual de Cobradores' en el módulo de Empleados, con tarjetas desplegables que detallan cada lote de recibos.",
+      "Fusión de Datos de Recaudación: El reporte ahora unifica automáticamente los cobros manuales (lotes por rango) con los pagos individuales de créditos, ofreciendo un total real consolidado por empleado.",
+      "Sistema de Alerta de Duplicados: Se implementó una validación proactiva en el registro de cobranza manual que detecta rangos de recibos ya ingresados para el mismo cobrador, previniendo errores de auditoría.",
+      "Desglose Financiero Detallado: Visualización directa de la recaudación dividida en Efectivo vs. Transferencias/Depósitos tanto en el resumen individual como en el detalle expandido.",
+      "Mejora en Auditoría de Recibos: El historial detallado muestra ahora el rango exacto de 'Recibo Inicial' a 'Recibo Final' y el periodo de fechas correspondiente a cada transacción."
+    ]
+  },
+  {
+    version: "5.44.2",
+    date: "2026-09-23",
+    changes: [
+      "Blindaje Total de Consola y Errores Globales: Se implementó una interceptación de logs ultra-agresiva en index.html que utiliza serialización JSON para detectar interferencias de MetaMask y Web3 incluso en objetos de error complejos y anidados.",
+      "Supresión Multicapa: Se extendió el filtrado a console.log y console.info, además de añadir 'brave' a la lista de exclusión para evitar ruidos de navegadores específicos.",
+      "Recuperación Silenciosa en ErrorBoundary: El motor de detección en el ErrorBoundary ahora ignora proactivamente cualquier rastro de Web3, evitando que el sistema entre en estado de error por causas externas al código base.",
+      "Optimización de Metadatos: Limpieza de referencias a URLs externas antiguas en el punto de entrada principal."
+    ]
+  },
+  {
+    version: "5.44.1",
+    date: "2026-09-23",
+    changes: [
+      "Blindaje Ultra-Agresivo contra Ruido Externo (MetaMask/Web3): Se reforzó el motor de filtrado global para silenciar proactivamente interferencias de extensiones de navegador (MetaMask, Phantom, TrustWallet) en todos los niveles (console.error, console.warn, unhandledrejection).",
+      "Mejora en ErrorBoundary: Se ampliaron los filtros de detección de errores de terceros para incluir patrones de RPC (eth_, personal_sign) y objetos de error complejos, garantizando que el ruido de red no interrumpa la navegación del usuario.",
+      "Optimización de Documentación de Venta: Revisión de la lógica de mapeo de detalles técnicos de vehículos en los contratos de compraventa y notas de entrega para asegurar la integridad de la información impresa."
+    ]
+  },
+  {
+    version: "5.44.0",
+    date: "2026-09-23",
+    changes: [
+      "Módulo de Kardex Técnico para Vehículos: Se implementó una sección de detalles específicos para artículos de categoría 'MOTO', permitiendo registrar Año, Procedencia, Cilindraje, Tonelaje, Pasajeros, Color, CAMV, Chasis, Motor, Clase y Tipo.",
+      "Integración de Comentarios de Factura: Nueva opción para transferir automáticamente los detalles técnicos del vehículo a los comentarios de la factura durante el proceso de venta.",
+      "Persistencia de Datos Técnicos: Los campos técnicos ahora se guardan de forma atómica en Firestore tanto al crear nuevos artículos como al editar existentes, garantizando la trazabilidad total del producto."
+    ]
+  },
+  {
+    version: "5.43.0",
+    date: "2026-09-23",
+    changes: [
+      "Blindaje Avanzado contra Interferencias Web3 (MetaMask): Se implementó un motor de filtrado ultra-robusto en el punto de entrada global y en el ErrorBoundary para detectar y silenciar ruidos de extensiones externas, incluso con objetos de error complejos.",
+      "Optimización de Supresión de Logs: Se ampliaron las palabras clave de filtrado (rpc error, inpage.js, provider) para garantizar que los errores externos del navegador no afecten la visibilidad de los logs del sistema ni interrumpan la experiencia del usuario.",
+      "Resiliencia de Estado en ErrorBoundary: Mejora en la recuperación automática de estado ante fallos de terceros, permitiendo que la aplicación continúe operando sin mostrar interfaces de error innecesarias ante ruidos de red o de billeteras digitales."
+    ]
+  },
+  {
+    version: "5.42.1",
+    date: "2026-09-23",
+    changes: [
+      "Solución Integral de Impresión y Descarga en Blanco: Corrección de la causa raíz en downloadElementAsPdf reemplazando traslaciones negativas por motor dual de alta resolución (html2canvas a 2x DPI con fallback limpio toPng) y neutralización del modo oscuro en el clonado de documentos.",
+      "Soporte de Rollo Continuo para Tickets Térmicos de 80mm: Cálculo dinámico de altura proporcional sin margen artificial para impresión y PDF en recibos de cobranza y abonos, eliminando páginas adicionales en blanco.",
+      "Paginación Limpia para Documentos en Formato A4: Segmentación matemática por bloques de página sin solapamientos ni desbordamientos para Solicitudes de Crédito, Pagarés a la Orden, Contratos de Compraventa y Estados de Cuenta.",
+      "Compatibilidad Multiplataforma (Móvil y Escritorio): Normalización de iframe con dimensiones visibles y captura de estilos Tailwind para navegadores de escritorio, junto con exportación directa de alta fidelidad para dispositivos móviles (iOS / Android)."
+    ]
+  },
+  {
+    version: "5.42.0",
+    date: "2026-09-22",
+    changes: [
+      "Ampliación Estructurada de Datos Corporativos en Configuración General: Incorporación formal de campos para Razón Social (Nombre Legal), Nombre Comercial / Marca de la Empresa, Nombre del Representante / Titular, Cédula / RUC, Teléfono y Correo Principal.",
+      "Ubicación Geográfica Jurídica con Selectores Estandarizados: Integración de selectores geográficos para País (Ecuador), Provincia y Cantón (jurisdicción dinámica) mediante el módulo unificado ecuadorLocations.ts.",
+      "Sincronización Transaccional en Perfil y Contratos: Garantía de persistencia en Firestore y compatibilidad retroactiva con datos existentes, asegurando que los pagarés, contratos de compraventa y solicitudes de crédito tomen la identificación formal del acreedor."
+    ]
+  },
+  {
+    version: "5.41.0",
+    date: "2026-09-22",
+    changes: [
+      "Blindaje Jurídico Integral del Pagaré a la Orden: Eliminación de la ambigüedad en la modalidad de vencimiento (supresión de 'días vista') unificando el vencimiento a fecha fija exacta y calendario de dividendos periódicos sucesivos.",
+      "Intereses Moratorios con Tasa Máxima Legal: Reemplazo de la tasa vacía por cláusula explícita que devenga automáticamente la tasa máxima de interés de mora vigente fijada por el Banco Central del Ecuador ante cualquier incumplimiento.",
+      "Identificación Precisa del Beneficiario: Estandarización de la fórmula legal a la orden de la razón social o de su titular propietario legal con su respectivo RUC.",
+      "Cláusula 'Sin Protesto' y Vía Ejecutiva: Incorporación formal de la exención de presentación física y aviso por falta de pago con sometimiento a la jurisdicción civil y vía ejecutiva.",
+      "Autorización Expresa de Riesgos Crediticios (LOPD): Inclusión de cláusula irrevocable de consulta y reporte a burós de información crediticia y Central de Riesgos conforme a la Ley Orgánica de Protección de Datos Personales.",
+      "Instrumentación Notarial 'Por Aval' con Solidaridad Pasiva: Redacción con renuncia expresa a los beneficios de orden, excusión y división ('haciendo de deuda ajena deuda propia') e identificación completa del aval con huella digital."
+    ]
+  },
+  {
+    version: "5.40.0",
+    date: "2026-09-22",
+    changes: [
+      "Blindaje Jurídico del Contrato de Compraventa con Reserva de Dominio: Fusión y adopción de la estructura de 9 cláusulas legales formales con aprehensión judicial inmediata, retención indemnizatoria de hasta un tercio (1/3) y remate mercantil.",
+      "Corrección de Incongruencias Financieras: Redacción precisa en la Cláusula Cuarta detallando explícitamente el precio total del bien, la cuota inicial (entrada) de contado y el saldo neto financiado con tabla de amortización completa (incluyendo Cuota 0).",
+      "Detección Inteligente de Bienes (Motos vs Electrodomésticos): Identificación técnica detallada en la Cláusula Segunda para motocicletas y vehículos (Chasis/VIN, Motor, Color, Año) y para electrodomésticos (series de fábrica, condición y especificaciones).",
+      "Identificación Plena de Garante y Jurisdicción Dinámica: Mención expresa con nombres y cédula del garante solidario (o cláusula de exclusión si es venta directa), e integración de jurisdicción territorial dinámica basada en la empresa con renuncia expresa de fuero.",
+      "Conversor de Valores Numéricos a Texto Legal: Implementación de la utilidad numberToSpanishWords para expresar cifras monetarias en letras mayúsculas con desglose de centavos de acuerdo al estándar notarial ecuatoriano."
+    ]
+  },
+  {
     version: "5.39.0",
     date: "2026-09-22",
     changes: [

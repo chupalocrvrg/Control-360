@@ -37,6 +37,21 @@ export interface CreditApplicationPrintData {
     quantity: number;
     unitPrice: number;
     totalPrice: number;
+    technicalDetails?: {
+      brand?: string;
+      model?: string;
+      year?: string;
+      origin?: string;
+      cylinderCapacity?: string;
+      tonnage?: string;
+      passengers?: string;
+      color?: string;
+      camv?: string;
+      chassis?: string;
+      engine?: string;
+      vehicleClass?: string;
+      vehicleType?: string;
+    };
   }[];
   grossTotal: number;
   downPayment: number;
@@ -341,12 +356,27 @@ export const CreditApplicationPrintModal: React.FC<CreditApplicationPrintModalPr
             </thead>
             <tbody>
               {data.items.map((item, idx) => (
-                <tr key={idx} className="border-b border-neutral-200">
-                  <td className="p-1 font-bold text-center w-12">{item.quantity}</td>
-                  <td className="p-1 font-medium">{item.articleName}</td>
-                  <td className="p-1 text-right font-mono">${(item.unitPrice || 0).toFixed(2)}</td>
-                  <td className="p-1 text-right font-mono font-bold">${(item.totalPrice || 0).toFixed(2)}</td>
-                </tr>
+                <React.Fragment key={idx}>
+                  <tr className="border-b border-neutral-200">
+                    <td className="p-1 font-bold text-center w-12">{item.quantity}</td>
+                    <td className="p-1 font-medium">
+                      <span className="block font-black uppercase text-neutral-900">{item.articleName}</span>
+                      {item.technicalDetails && (
+                        <div className="mt-1 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[8.5px] text-neutral-600 bg-neutral-50 p-1 rounded border border-neutral-100">
+                          {item.technicalDetails.brand && <span><strong>Marca:</strong> {item.technicalDetails.brand}</span>}
+                          {item.technicalDetails.model && <span><strong>Modelo:</strong> {item.technicalDetails.model}</span>}
+                          {item.technicalDetails.year && <span><strong>Año:</strong> {item.technicalDetails.year}</span>}
+                          {item.technicalDetails.color && <span><strong>Color:</strong> {item.technicalDetails.color}</span>}
+                          {item.technicalDetails.chassis && <span className="col-span-2"><strong>Chasis:</strong> {item.technicalDetails.chassis}</span>}
+                          {item.technicalDetails.engine && <span className="col-span-2"><strong>Motor:</strong> {item.technicalDetails.engine}</span>}
+                          {item.technicalDetails.camv && <span className="col-span-2"><strong>CAMV:</strong> {item.technicalDetails.camv}</span>}
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-1 text-right font-mono">${(item.unitPrice || 0).toFixed(2)}</td>
+                    <td className="p-1 text-right font-mono font-bold">${(item.totalPrice || 0).toFixed(2)}</td>
+                  </tr>
+                </React.Fragment>
               ))}
             </tbody>
           </table>

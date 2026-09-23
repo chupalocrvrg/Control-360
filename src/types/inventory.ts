@@ -9,6 +9,19 @@ export interface Article {
   brand?: string; // Predictive brand
   model?: string; // Predictive model
   barcode?: string; // Optional barcode
+  // Vehicle-specific fields (Motos)
+  year?: string;
+  origin?: string;
+  cylinderCapacity?: string;
+  tonnage?: string;
+  passengers?: string;
+  color?: string;
+  camv?: string;
+  chassis?: string;
+  engine?: string;
+  vehicleClass?: string;
+  vehicleType?: string;
+  passToInvoiceComment?: boolean;
   userId: string; // Owner enterprise ID
   createdAt: any;
 }

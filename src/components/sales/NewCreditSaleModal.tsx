@@ -238,6 +238,22 @@ export const NewCreditSaleModal: React.FC<NewCreditSaleModalProps> = ({
     const firstArticle = articles[0];
     const firstWarehouse = warehouses[0];
 
+    const technicalDetails = firstArticle.category?.toLowerCase().includes('moto') ? {
+      brand: firstArticle.brand,
+      model: firstArticle.model,
+      year: firstArticle.year,
+      origin: firstArticle.origin,
+      cylinderCapacity: firstArticle.cylinderCapacity,
+      tonnage: firstArticle.tonnage,
+      passengers: firstArticle.passengers,
+      color: firstArticle.color,
+      camv: firstArticle.camv,
+      chassis: firstArticle.chassis,
+      engine: firstArticle.engine,
+      vehicleClass: firstArticle.vehicleClass,
+      vehicleType: firstArticle.vehicleType
+    } : undefined;
+
     setSaleItems(prev => [
       ...prev,
       {
@@ -248,7 +264,8 @@ export const NewCreditSaleModal: React.FC<NewCreditSaleModalProps> = ({
         warehouseName: firstWarehouse.name,
         unitPrice: 100,
         totalPrice: 100,
-        selectedSeries: []
+        selectedSeries: [],
+        technicalDetails
       }
     ]);
   };
@@ -260,7 +277,27 @@ export const NewCreditSaleModal: React.FC<NewCreditSaleModalProps> = ({
 
       if (field === 'articleId') {
         const art = articles.find(a => a.id === value);
-        if (art) item.articleName = art.name;
+        if (art) {
+          item.articleName = art.name;
+          // Populate technical details if it's a vehicle
+          if (art.category?.toLowerCase().includes('moto')) {
+            item.technicalDetails = {
+              brand: art.brand,
+              model: art.model,
+              year: art.year,
+              origin: art.origin,
+              cylinderCapacity: art.cylinderCapacity,
+              tonnage: art.tonnage,
+              passengers: art.passengers,
+              color: art.color,
+              camv: art.camv,
+              chassis: art.chassis,
+              engine: art.engine,
+              vehicleClass: art.vehicleClass,
+              vehicleType: art.vehicleType
+            };
+          }
+        }
         item.selectedSeries = [];
       }
       if (field === 'warehouseId') {

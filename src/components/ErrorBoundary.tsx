@@ -22,18 +22,24 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    const errMsg = (error.message || String(error)).toLowerCase();
+    const filteredStrings = [
+      'metamask', 'ethereum', 'web3', 'failed to connect to metamask', 
+      'extension', 'wallet', 'rpc error', 'inpage.js', 'provider',
+      'method not found', 'user denied', 'eth_', 'personal_sign',
+      'trustwallet', 'phantom', 'solana', 'coinbase', 'brave'
+    ];
     
-    // Ignore external extension noise (MetaMask, Web3, etc)
-    const isExtensionError = 
-      errMsg.includes('metamask') || 
-      errMsg.includes('ethereum') || 
-      errMsg.includes('web3') ||
-      errMsg.includes('failed to connect to metamask') ||
-      errMsg.includes('extension') ||
-      errMsg.includes('wallet');
+    const isNoise = (val: any) => {
+      if (!val) return false;
+      try {
+        const str = (typeof val === 'object' ? JSON.stringify(val) : String(val)).toLowerCase();
+        if (filteredStrings.some(s => str.includes(s))) return true;
+      } catch (e) {}
+      const basicStr = String(val.message || val.stack || val || '').toLowerCase();
+      return filteredStrings.some(s => basicStr.includes(s));
+    };
 
-    if (isExtensionError) {
+    if (isNoise(error)) {
       console.warn('Filtered external extension error:', error);
       // Try to recover state so we don't show the error UI
       (this as any).setState({ hasError: false, error: undefined });
@@ -59,19 +65,27 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public render() {
     if (this.state.hasError) {
+      const filteredStrings = [
+        'metamask', 'ethereum', 'web3', 'failed to connect to metamask', 
+        'extension', 'wallet', 'rpc error', 'inpage.js', 'provider',
+        'method not found', 'user denied', 'eth_', 'personal_sign',
+        'trustwallet', 'phantom', 'solana', 'coinbase', 'brave'
+      ];
+      
+      const isNoise = (val: any) => {
+        if (!val) return false;
+        try {
+          const str = (typeof val === 'object' ? JSON.stringify(val) : String(val)).toLowerCase();
+          if (filteredStrings.some(s => str.includes(s))) return true;
+        } catch (e) {}
+        const basicStr = String(val.message || val.stack || val || '').toLowerCase();
+        return filteredStrings.some(s => basicStr.includes(s));
+      };
+
       const errMsg = (this.state.error?.message || '').toLowerCase();
       const errName = (this.state.error?.name || '').toLowerCase();
-      
-      // Also prevent showing the UI for filtered errors
-      const isExtensionError = 
-        errMsg.includes('metamask') || 
-        errMsg.includes('ethereum') || 
-        errMsg.includes('web3') ||
-        errMsg.includes('failed to connect to metamask') ||
-        errMsg.includes('extension') ||
-        errMsg.includes('wallet');
 
-      if (isExtensionError) {
+      if (isNoise(this.state.error)) {
         return (this as any).props.children;
       }
       const isChunkError = 

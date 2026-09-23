@@ -26,6 +26,21 @@ export interface CreditSaleItem {
   unitPrice: number;
   totalPrice: number;
   selectedSeries?: string[];
+  technicalDetails?: {
+    brand?: string;
+    model?: string;
+    year?: string;
+    origin?: string;
+    cylinderCapacity?: string;
+    tonnage?: string;
+    passengers?: string;
+    color?: string;
+    camv?: string;
+    chassis?: string;
+    engine?: string;
+    vehicleClass?: string;
+    vehicleType?: string;
+  };
 }
 
 export interface CreditSale {

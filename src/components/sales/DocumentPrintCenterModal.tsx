@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { CreditSale } from '../../types/creditSale';
 import { Client } from '../../types/client';
-import { formatCurrency } from '../../lib/utils';
+import { formatCurrency, numberToSpanishWords } from '../../lib/utils';
 import { printElement, downloadElementAsPdf } from '../../lib/printUtils';
 import { 
   Printer, 
@@ -116,7 +116,10 @@ export const DocumentPrintCenterModal: React.FC<DocumentPrintCenterModalProps> =
       })()
     : format(new Date(), "dd 'de' MMMM 'del' yyyy", { locale: es });
 
-  const clientName = sale.clientName || (clientDetails?.lastName ? `${clientDetails?.lastName || ''} ${clientDetails?.firstName || ''}`.trim() : 'Consumidor Final');
+  const rawClientName = sale.clientName || (clientDetails?.lastName ? `${clientDetails?.lastName || ''} ${clientDetails?.firstName || ''}`.trim() : 'Consumidor Final');
+  const clientLastName = clientDetails?.lastName || (rawClientName.includes(' ') ? rawClientName.split(' ')[0] : rawClientName);
+  const clientFirstName = clientDetails?.firstName || (rawClientName.includes(' ') ? rawClientName.split(' ').slice(1).join(' ') : '');
+  const clientName = clientLastName && clientFirstName ? `${clientLastName} ${clientFirstName}` : rawClientName;
   const clientIdCard = clientDetails?.idCard || creditSaleDetails?.clientIdCard || '9999999999';
   const clientPhone = clientDetails?.phone || creditSaleDetails?.clientPhone || 'S/N';
   const clientAddress = clientDetails?.address || creditSaleDetails?.clientAddress || 'Ciudad';
@@ -126,6 +129,102 @@ export const DocumentPrintCenterModal: React.FC<DocumentPrintCenterModalProps> =
   const guarantorIdCard = creditSaleDetails?.guarantorIdCard || clientDetails?.guarantorIdCard;
   const guarantorPhone = creditSaleDetails?.guarantorPhone || clientDetails?.guarantorPhone;
   const guarantorAddress = clientDetails?.guarantorAddress || 'S/N';
+
+  // Dynamic Jurisdiction Canton (e.g., La Troncal or extracted from companyAddress)
+  const getJurisdictionCanton = (address: string, fallback = 'La Troncal') => {
+    if (!address) return fallback;
+    const matches = address.match(/\b(La Troncal|Guayaquil|Quito|Cuenca|Azogues|Cañar|Machala|Ambato|Riobamba|Manta|Portoviejo|Santo Domingo|Ibarra|Loja|Milagro|Duran|Quevedo|Babahoyo|Latacunga|Esmeraldas)\b/i);
+    if (matches) return matches[1];
+    const parts = address.split(',').map(p => p.trim());
+    if (parts.length > 1) {
+      const candidate = parts[parts.length - 1].replace(/\./g, '');
+      if (candidate.length > 2 && !/ecuador/i.test(candidate)) return candidate;
+    }
+    return fallback;
+  };
+  const jurisdictionCanton = getJurisdictionCanton(companyAddress, 'La Troncal');
+
+  // Financial values
+  const grossTotal = creditSaleDetails?.grossTotal || sale.totalValue || 0;
+  const downPayment = creditSaleDetails?.downPayment || 0;
+  const netFinancedAmount = creditSaleDetails?.netFinancedAmount || Math.max(0, grossTotal - downPayment);
+  const installmentsCount = creditSaleDetails?.installmentsCount || (creditSaleDetails?.installments?.length || 1);
+  const frequency = creditSaleDetails?.frequency || 'MENSUAL';
+
+  // Articles & Smart detection for motorcycles / vehicles
+  const contractItems = (creditSaleDetails?.items && creditSaleDetails.items.length > 0)
+    ? creditSaleDetails.items
+    : [{
+        articleId: '1',
+        articleName: sale.article || 'Mercadería en General',
+        quantity: 1,
+        warehouseId: '',
+        warehouseName: '',
+        unitPrice: sale.totalValue,
+        totalPrice: sale.totalValue,
+        selectedSeries: [],
+        technicalDetails: undefined
+      }];
+
+  const isMotorcycleOrVehicle = (name: string) => {
+    return /moto|motocicleta|chasis|motor|vin|vehiculo|scooter|cuadron|pasola|trimoto|torito/i.test(name);
+  };
+
+  // Amortization Table with Cuota 0 (Entrada / Inicial)
+  const amortizationTable = [
+    {
+      number: 0,
+      dueDate: sale.date || format(new Date(), 'yyyy-MM-dd'),
+      amount: downPayment,
+      description: 'Cuota Inicial / Entrada (Contado a la firma)'
+    },
+    ...(creditSaleDetails?.installments && creditSaleDetails.installments.length > 0
+      ? creditSaleDetails.installments.map(inst => ({
+          number: inst.number,
+          dueDate: inst.dueDate,
+          amount: inst.amount,
+          description: `Dividendo Periódico N° ${inst.number}`
+        }))
+      : Array.from({ length: installmentsCount }, (_, i) => ({
+          number: i + 1,
+          dueDate: '',
+          amount: installmentsCount > 0 ? (netFinancedAmount / installmentsCount) : netFinancedAmount,
+          description: `Dividendo Periódico N° ${i + 1}`
+        }))
+    )
+  ];
+
+  const formatAmortizationDate = (dateStr?: string) => {
+    if (!dateStr) return '---';
+    try {
+      const [y, m, d] = dateStr.split('-');
+      if (y && m && d) return `${d}/${m}/${y}`;
+      return dateStr;
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const installmentAmount = creditSaleDetails?.installmentAmount || (installmentsCount > 0 ? (netFinancedAmount / installmentsCount) : netFinancedAmount);
+  const lastInstallmentDate = creditSaleDetails?.installments && creditSaleDetails.installments.length > 0
+    ? creditSaleDetails.installments[creditSaleDetails.installments.length - 1].dueDate
+    : '';
+
+  const formatLegalDate = (dateStr?: string) => {
+    if (!dateStr) return displayDate;
+    try {
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        return `${parseInt(parts[2], 10)} de ${format(new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])), 'MMMM', { locale: es })} del ${parts[0]}`;
+      }
+      return dateStr;
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const finalDueDateLegal = lastInstallmentDate ? formatLegalDate(lastInstallmentDate) : displayDate;
+  const startDateLegal = creditSaleDetails?.startDate ? formatLegalDate(creditSaleDetails.startDate) : displayDate;
 
   return (
     <div className="fixed inset-0 z-[150] bg-black/60 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
@@ -417,105 +516,327 @@ export const DocumentPrintCenterModal: React.FC<DocumentPrintCenterModalProps> =
 
               {/* DOCUMENT 2: PAGARÉ A LA ORDEN */}
               {selectedDoc === 'PAGARE_ORDEN' && (
-                <div className="space-y-8 py-4">
-                  <div className="flex justify-between items-center bg-neutral-100 p-4 rounded border-2 border-neutral-800">
+                <div className="space-y-4 text-[10.5px] font-sans leading-relaxed text-neutral-900">
+                  {/* Encabezado Institucional y Metadatos */}
+                  <div className="flex justify-between items-start border-b-2 border-neutral-900 pb-3">
                     <div>
-                      <span className="text-[11px] text-neutral-600 block uppercase font-bold tracking-wider">Por la cantidad de:</span>
-                      <strong className="text-2xl text-neutral-900 font-serif font-black">
-                        {formatCurrency(creditSaleDetails?.netFinancedAmount || sale.totalValue)}
-                      </strong>
+                      <h2 className="font-black text-base uppercase tracking-wider text-neutral-900">
+                        {companyName}
+                      </h2>
+                      <p className="text-[10px] text-neutral-600 font-medium">
+                        R.U.C.: <strong>{companyRuc}</strong> | Tel: {companyPhone}
+                      </p>
+                      <p className="text-[10px] text-neutral-600 font-medium">
+                        Dirección: {companyAddress}
+                      </p>
                     </div>
-                    <div className="text-right">
-                      <span className="text-[11px] text-neutral-600 block uppercase font-bold tracking-wider">Pagaré N°:</span>
-                      <strong className="text-lg text-neutral-900 font-mono font-bold">
-                        {sale.promissoryNoteNumber || 'PAG-2026-0001'}
-                      </strong>
-                    </div>
-                  </div>
 
-                  <div className="text-justify leading-loose space-y-6 text-[12px] font-serif px-2">
-                    <p>
-                      Por este <strong>PAGARÉ A LA ORDEN</strong>, yo <strong>{clientName}</strong> con Cédula de Identidad / RUC N° <strong>{clientIdCard}</strong>, mayor de edad, de nacionalidad ecuatoriana, domiciliado en la ciudad de <strong>{clientCity}</strong>, en la dirección <strong>{clientAddress}</strong>; debo y pagaré de manera incondicional, indivisible y solidaria a la orden de <strong>{companyName}</strong>, o a su cesionario o endosatario, en sus oficinas en la ciudad de <strong>{companyAddress}</strong>, la cantidad de:
-                    </p>
-                    
-                    <p className="text-center text-lg font-black bg-neutral-50 py-3 border-y uppercase tracking-widest">
-                      {formatCurrency(creditSaleDetails?.netFinancedAmount || sale.totalValue)} DÓLARES
-                    </p>
-
-                    <p>
-                      Dicho valor ha sido recibido a mi entera satisfacción por concepto de compraventa de mercadería bajo <strong>CONTRATO DE COMPRAVENTA CON RESERVA DE DOMINIO</strong>. Me obligo a cancelar esta deuda mediante {creditSaleDetails?.installmentsCount || '___'} cuotas de {formatCurrency(creditSaleDetails?.installmentAmount || 0)} cada una, con vencimiento {creditSaleDetails?.frequency || 'MENSUAL'}, a partir del día <strong>{creditSaleDetails?.startDate || displayDate}</strong>.
-                    </p>
-
-                    <p>
-                      La falta de pago de una o más de las cuotas dará derecho al acreedor a declarar de plazo vencido la totalidad de la obligación y exigir el pago inmediato del saldo insoluto, intereses de mora a la tasa máxima autorizada por la ley, y todos los gastos judiciales, extrajudiciales y honorarios profesionales que ocasione su cobro. Renuncio a fuero y domicilio y me someto a la jurisdicción de los Jueces de esta ciudad y al trámite ejecutivo o sumario a elección del actor.
-                    </p>
-                  </div>
-
-                  {/* Firmas Pagaré */}
-                  <div className="grid grid-cols-2 gap-16 pt-20 text-center text-[11px]">
-                    <div className="space-y-2">
-                      <div className="border-t-2 border-neutral-900 pt-2">
-                        <strong className="uppercase text-xs">{clientName}</strong>
-                        <p className="text-[10px] text-neutral-700">C.I.: {clientIdCard}</p>
-                        <p className="font-bold mt-1">DEUDOR PRINCIPAL</p>
-                        <p className="text-[9px] text-neutral-500">Huella Digital</p>
+                    <div className="text-right space-y-1">
+                      <div className="font-bold text-xs uppercase tracking-widest text-neutral-800">
+                        Pagaré a la Orden Nº <span className="font-mono font-black text-neutral-900">{sale.promissoryNoteNumber || creditSaleDetails?.promissoryNoteNumber || 'PAG-0001'}</span>
                       </div>
-                      <div className="w-16 h-20 border border-neutral-300 mx-auto rounded mt-2"></div>
+                      <div className="text-[11px] font-medium text-neutral-700">
+                        <strong>Vence el:</strong> <span className="font-bold text-neutral-900">{finalDueDateLegal}</span>
+                      </div>
+                      <div className="text-sm font-black font-mono text-neutral-900 bg-neutral-100 px-2 py-0.5 rounded border border-neutral-300 inline-block">
+                        Por $ : {netFinancedAmount.toFixed(2)} USD
+                      </div>
                     </div>
-                    {guarantorName && (
-                      <div className="space-y-2">
-                        <div className="border-t-2 border-neutral-900 pt-2">
-                          <strong className="uppercase text-xs">{guarantorName}</strong>
-                          <p className="text-[10px] text-neutral-700">C.I.: {guarantorIdCard}</p>
-                          <p className="font-bold mt-1">GARANTE SOLIDARIO (AVAL)</p>
-                          <p className="text-[9px] text-neutral-500">Huella Digital</p>
+                  </div>
+
+                  {/* Cláusula Principal de Pago Incondicional */}
+                  <p className="text-justify leading-relaxed">
+                    Debo y pagaré incondicionalmente, a la orden de <strong>{companyName} (o de su titular propietario legal)</strong>, con R.U.C. N° <strong>{companyRuc}</strong>, en esta ciudad o en el lugar donde fuera convenido, la cantidad de <strong>{numberToSpanishWords(netFinancedAmount)} DÓLARES DE LOS ESTADOS UNIDOS DE AMÉRICA (US $ {netFinancedAmount.toFixed(2)})</strong>, que en concepto de capital me obligo incondicionalmente a pagar a partir del <strong>{startDateLegal}</strong> hasta el <strong>{finalDueDateLegal}</strong>, mediante <strong>{installmentsCount}</strong> cuotas o dividendos sucesivos de periodicidad <strong>{frequency}</strong> por el valor de <strong>{formatCurrency(installmentAmount)}</strong> cada una, valor recibido a mi entera satisfacción por concepto de saldo de compraventa de mercadería.
+                  </p>
+
+                  {/* Tasa Pactada e Interés Moratorio */}
+                  <p className="text-justify leading-relaxed">
+                    En la fecha de vencimiento de los antedichos valores, me obligo además incondicionalmente a pagar a <strong>{companyName} (o de su titular propietario legal)</strong> la tasa de interés pactada para la presente operación crediticia desde la fecha de suscripción de este pagaré hasta el vencimiento del plazo de los respectivos valores. En caso de mora o retraso en el pago de uno o más de los dividendos del capital, la mora se liquidará desde la fecha de vencimiento respectivo y devengará automáticamente la <strong>tasa máxima de interés de mora permitida por las regulaciones vigentes del Banco Central del Ecuador</strong>, la cual correrá hasta la fecha en que se efectúe la cancelación total de la obligación.
+                  </p>
+
+                  {/* Aceleración de Deuda y Vía Ejecutiva */}
+                  <p className="text-justify leading-relaxed">
+                    <strong>{companyName} (o de su titular propietario legal)</strong> podrá declarar de plazo vencido anticipado todas las obligaciones y dividendos que estuvieren vigentes, aun cuando no estuvieren vencidos, y proceder al recaudo judicial de todo lo debido. Me obligo además a cubrir los impuestos, tasas, gastos judiciales y extrajudiciales, inclusive honorarios profesionales, que ocasione la suscripción de este Pagaré y su cobro, siendo suficiente prueba para establecer tales gastos la sola aseveración o liquidación del acreedor. En caso de incumplimiento de todo lo estipulado, me obligo con todos mis bienes presentes o futuros, propios y gananciales.
+                  </p>
+
+                  {/* Pluralidad de partes */}
+                  <p className="text-justify leading-relaxed">
+                    Siempre que los suscriptores de este pagaré, en su calidad de deudor o garante sean más de uno, los términos del presente documento se entenderán en plural; igualmente, si el deudor es una persona jurídica, las declaraciones se entienden hechas por su representante legal por sus propios derechos y por los que representa de ella.
+                  </p>
+
+                  {/* Jurisdicción y Sin Protesto */}
+                  <p className="text-justify leading-relaxed">
+                    En caso de controversia las partes acuerdan someterse a cualquiera de los jueces competentes de lo civil en la ciudad o cantón de <strong>{jurisdictionCanton}</strong> y en la <strong>vía ejecutiva</strong>, para cuyo efecto renuncio expresamente a fuero y domicilio. Con la cláusula <strong>SIN PROTESTO</strong>, eximiendo al acreedor de presentación para el pago y de aviso por falta del mismo. Para constancia se firma en la ciudad de <strong>{jurisdictionCanton}</strong>, el <strong>{displayDate}</strong>.
+                  </p>
+
+                  {/* Autorización de Burós de Crédito y Central de Riesgos */}
+                  <div className="p-2.5 border border-neutral-300 rounded bg-neutral-50/50 print:bg-transparent text-[10px] space-y-1">
+                    <strong className="block text-[10.5px] uppercase text-neutral-900 tracking-wide">
+                      AUTORIZACIÓN DE RIESGOS CREDITICIOS (LEY ORGÁNICA DE PROTECCIÓN DE DATOS PERSONALES):
+                    </strong>
+                    <p className="text-justify leading-normal text-neutral-700">
+                      Autorizo(amos) expresa, previa e irrevocablemente a <strong>{companyName} (o de su titular propietario legal)</strong>, con R.U.C. N° <strong>{companyRuc}</strong>, para que obtenga cuantas veces sean necesarias, de cualquier fuente de información, incluidos los burós de crédito legalmente autorizados y la Dirección Nacional de Registro de Datos Públicos / Central de Riesgos, mi información de riesgos crediticios y comportamiento comercial; de igual manera <strong>{companyName} (o de su titular propietario legal)</strong> queda expresamente autorizado para que pueda transferir o entregar dicha información a los burós de crédito y/o a la Central de Riesgos de conformidad con la legislación aplicable.
+                    </p>
+                  </div>
+
+                  {/* Firma del Deudor Principal */}
+                  <div className="pt-2 space-y-2">
+                    <div className="w-full max-w-sm">
+                      <p className="text-[10px] text-neutral-500">Firma: ................................................................................</p>
+                      <div className="mt-1 text-[10px] space-y-0.5">
+                        <p><strong>DEUDOR:</strong> <span className="uppercase">{clientLastName} {clientFirstName}</span></p>
+                        <p><strong>C.C./RUC:</strong> <span className="font-mono">{clientIdCard}</span></p>
+                        <p><strong>Dirección:</strong> {clientAddress}</p>
+                        <p><strong>Teléfono:</strong> {clientPhone}</p>
+                      </div>
+                    </div>
+                    <p className="text-[10px] font-semibold text-neutral-800">
+                      Para los fines de ley, expresamos nuestro visto bueno, <strong>SIN PROTESTO</strong>. {jurisdictionCanton}, {displayDate}.
+                    </p>
+                  </div>
+
+                  {/* Bloque POR AVAL (Garante Solidario) */}
+                  {guarantorName ? (
+                    <div className="pt-2 border-t border-neutral-300 space-y-2">
+                      <p className="text-justify leading-relaxed">
+                        <strong>POR AVAL:</strong> Me constituyo en garantía y codeudor solidario del deudor <strong>{clientLastName} {clientFirstName}</strong> en todas y cada una de las obligaciones contraídas por el mismo en este documento a la orden de <strong>{companyName} (o de su titular propietario legal)</strong>, por lo que estipulo expresamente mi obligación incondicional de pagar las antedichas obligaciones comprometiéndome con todos mis bienes presentes y futuros, propios y gananciales, y renuncio expresamente a los beneficios de orden, excusión de domicilio, división y otros que pudieran favorecerme. Asimismo me constituyo pagador de las obligaciones del deudor contraídas en este pagaré, <strong>haciendo de deuda ajena deuda propia</strong>.
+                      </p>
+                      <p className="text-justify leading-relaxed">
+                        La presente garantía y obligación solidaria suscrita por todo el tiempo que duren o se encuentren vigentes las obligaciones a cargo del deudor principal y aún cuando venciere el plazo estipulado de las obligaciones a que accede este aval. Acepto que mi obligación como garante será válida aún cuando la obligación principal fuere nula por cualquier causa. <strong>SIN PROTESTO</strong>, exímese de presentación para el pago y de aviso por falta del mismo, para constancia se firma en <strong>{jurisdictionCanton}</strong>, el <strong>{displayDate}</strong>.
+                      </p>
+
+                      <div className="w-full max-w-sm pt-2">
+                        <p className="text-[10px] text-neutral-500">Firma: ................................................................................</p>
+                        <div className="mt-1 text-[10px] space-y-0.5">
+                          <p><strong>AVAL / GARANTE SOLIDARIO:</strong> <span className="uppercase">{guarantorName}</span></p>
+                          <p><strong>C.C./RUC:</strong> <span className="font-mono">{guarantorIdCard}</span></p>
+                          <p><strong>Dirección:</strong> {guarantorAddress}</p>
+                          <p><strong>Teléfono:</strong> {guarantorPhone}</p>
                         </div>
-                        <div className="w-16 h-20 border border-neutral-300 mx-auto rounded mt-2"></div>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <div className="pt-2 border-t border-neutral-200 text-[10px] text-neutral-600 italic">
+                      Obligación aprobada bajo solvencia y responsabilidad patrimonial exclusiva de EL DEUDOR principal (sin aval adicional).
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* DOCUMENT 3: CONTRATO DE COMPRAVENTA */}
+              {/* DOCUMENT 3: CONTRATO DE COMPRAVENTA CON RESERVA DE DOMINIO */}
               {selectedDoc === 'CONTRATO_COMPRAVENTA' && (
-                <div className="space-y-4 text-[11px] font-serif">
-                  <div className="text-center font-black text-sm tracking-widest text-neutral-900 uppercase border-b-2 border-neutral-800 pb-2">
-                    Contrato de Compra y Venta con Reserva de Dominio
+                <div className="space-y-4 text-[10.5px] font-sans leading-relaxed text-neutral-900">
+                  {/* Encabezado Institucional */}
+                  <div className="border-b-2 border-neutral-900 pb-2.5 text-center space-y-1">
+                    <h2 className="font-black text-base uppercase tracking-wider text-neutral-900">
+                      {companyName}
+                    </h2>
+                    <p className="text-[11px] font-semibold text-neutral-700 italic">
+                      Líderes en atención personalizada
+                    </p>
+                    <div className="flex flex-wrap justify-center gap-x-6 text-[10px] text-neutral-600 font-medium">
+                      <span><strong>Dirección:</strong> {companyAddress}</span>
+                      <span><strong>Teléfono:</strong> {companyPhone}</span>
+                      <span><strong>R.U.C.:</strong> {companyRuc}</span>
+                    </div>
                   </div>
 
+                  {/* Título Oficial */}
+                  <div className="text-center font-black text-sm uppercase tracking-widest text-neutral-900 border-b border-neutral-400 pb-1.5 pt-1">
+                    CONTRATO DE COMPRA VENTA - CON RESERVA DE DOMINIO
+                  </div>
+
+                  {/* Comparecencia */}
                   <p className="text-justify leading-relaxed">
-                    Comparecen a la celebración del presente contrato de compraventa con reserva de dominio, por una parte la empresa <strong>{companyName}</strong> con RUC N° {companyRuc}, debidamente representada, a quien en adelante y para efectos de este contrato se le denominará "EL VENDEDOR"; y, por otra parte, el señor(a) <strong>{clientName}</strong> con Cédula de Identidad N° <strong>{clientIdCard}</strong>, a quien en adelante se le denominará "EL COMPRADOR". Los comparecientes acuerdan las siguientes cláusulas:
+                    Conste por el presente instrumento de contrato compraventa con reserva de dominio que se otorga de conformidad con lo que dispone la Ley de acuerdo a las siguientes cláusulas:
                   </p>
 
-                  <div className="space-y-4 px-2">
-                    <p>
-                      <strong>CLÁUSULA PRIMERA: OBJETO.-</strong> EL VENDEDOR da en venta real y perpetua a EL COMPRADOR el siguiente bien: <strong>{sale.article}</strong>, nuevo y en perfecto estado.
-                    </p>
-                    <p>
-                      <strong>CLÁUSULA SEGUNDA: PRECIO Y FINANCIAMIENTO.-</strong> El precio total de la mercadería es de <strong>{formatCurrency(sale.totalValue)}</strong>. EL COMPRADOR entrega como cuota inicial (entrada) la suma de {formatCurrency(creditSaleDetails?.downPayment || 0)} y el saldo de {formatCurrency(creditSaleDetails?.netFinancedAmount || 0)} será cancelado en {creditSaleDetails?.installmentsCount || '___'} cuotas periódicas.
-                    </p>
-                    <p>
-                      <strong>CLÁUSULA TERCERA: RESERVA DE DOMINIO.-</strong> De conformidad con el Código de Comercio, EL VENDEDOR se reserva el dominio del bien objeto de este contrato hasta que EL COMPRADOR haya cancelado la totalidad del precio pactado. En consecuencia, EL COMPRADOR no podrá enajenar, hipotecar ni gravar el bien sin autorización escrita de EL VENDEDOR.
-                    </p>
-                    <p>
-                      <strong>CLÁUSULA CUARTA: MORA.-</strong> El incumplimiento en el pago de dos o más cuotas dará lugar a la resolución del contrato, pudiendo EL VENDEDOR retirar el bien de manos de EL COMPRADOR sin necesidad de intervención judicial previa.
-                    </p>
-                    <p>
-                      <strong>CLÁUSULA QUINTA: JURISDICCIÓN.-</strong> Las partes renuncian fuero y se someten a los jueces competentes de la ciudad de <strong>{companyAddress}</strong>.
+                  {/* CLÁUSULA PRIMERA: CONTRATANTES */}
+                  <div className="space-y-1">
+                    <p className="text-justify leading-relaxed">
+                      <strong>PRIMER.- CONTRATANTES:</strong> Por una parte <strong>{companyName}</strong> con # de R.U.C.: <strong>{companyRuc}</strong>, con domicilio en <strong>{companyAddress}</strong>, a quien también se denominará propietario, vendedor o acreedor; y por otra parte el señor(a) <strong>{clientName}</strong> con C.I./RUC <strong>{clientIdCard}</strong>, domiciliado en las calles <strong>{clientAddress}</strong> de la ciudad de <strong>{clientCity}</strong>, teléfono <strong>{clientPhone}</strong>, a quien también se llamará comprador o deudor.
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-16 pt-24 text-center text-[10px]">
-                    <div className="border-t-2 border-neutral-900 pt-2">
-                      <strong className="uppercase">{companyName}</strong>
-                      <p className="font-bold uppercase tracking-tighter">EL VENDEDOR</p>
+                  {/* CLÁUSULA SEGUNDA: DESCRIPCIÓN DE LOS BIENES */}
+                  <div className="space-y-1">
+                    <p className="text-justify leading-relaxed">
+                      <strong>SEGUNDA.- DESCRIPCION DE LOS BIENES:</strong> El vendedor es propietario de los bienes muebles, cuyas características, especificaciones y valores se describen a continuación:
+                    </p>
+
+                    <div className="border border-neutral-300 rounded p-2 bg-neutral-50/60 print:bg-transparent space-y-2 text-[10px]">
+                      {contractItems.map((item, idx) => {
+                        const isMoto = isMotorcycleOrVehicle(item.articleName);
+                        const seriesStr = item.selectedSeries && item.selectedSeries.length > 0 ? item.selectedSeries.join(' / ') : 'SEGÚN SERIE TÉCNICA EN SISTEMA';
+                        return (
+                          <div key={idx} className="border-b border-neutral-200 last:border-b-0 pb-1.5 last:pb-0">
+                            <div className="flex justify-between items-center font-bold">
+                              <span>Artículo {idx + 1}: <span className="uppercase text-neutral-900">{item.articleName}</span></span>
+                              <span className="font-mono text-xs font-black">{formatCurrency(item.totalPrice || item.unitPrice * item.quantity)}</span>
+                            </div>
+                            
+                            {isMoto ? (
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mt-1 text-[9.5px] bg-white print:bg-transparent p-1.5 rounded border border-neutral-200">
+                                <div><strong>Clase/Tipo:</strong> {item.technicalDetails?.vehicleClass || 'MOTOCICLETA'} / {item.technicalDetails?.vehicleType || 'PASEO'}</div>
+                                <div><strong>N° Chasis / Serie:</strong> <span className="font-mono font-bold">{item.technicalDetails?.chassis || seriesStr}</span></div>
+                                <div><strong>N° de Motor:</strong> <span className="font-mono font-bold">{item.technicalDetails?.engine || 'S/N'}</span></div>
+                                <div><strong>Marca/Modelo:</strong> {item.technicalDetails?.brand || 'S/N'} {item.technicalDetails?.model || ''}</div>
+                                <div><strong>Año:</strong> {item.technicalDetails?.year || (sale.date ? sale.date.split('-')[0] : new Date().getFullYear())}</div>
+                                <div><strong>Color:</strong> {item.technicalDetails?.color || 'S/N'}</div>
+                                <div><strong>Cilindraje:</strong> {item.technicalDetails?.cylinderCapacity || 'S/N'}</div>
+                                <div><strong>Procedencia:</strong> {item.technicalDetails?.origin || 'S/N'}</div>
+                                <div className="col-span-2"><strong>CAMV:</strong> {item.technicalDetails?.camv || 'S/N'}</div>
+                                <div className="col-span-2 text-right"><strong>Valor Unitario:</strong> {formatCurrency(item.unitPrice || item.totalPrice)}</div>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 mt-1 text-[9.5px] bg-white print:bg-transparent p-1.5 rounded border border-neutral-200">
+                                <div><strong>Cantidad:</strong> {item.quantity} Unidad(es)</div>
+                                <div className="col-span-2"><strong>Serie(s) de Fábrica:</strong> <span className="font-mono font-bold">{seriesStr}</span></div>
+                                <div className="col-span-3"><strong>Condición:</strong> NUEVO, EN PERFECTO FUNCIONAMIENTO A ENTERA SATISFACCIÓN</div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      <div className="text-right pt-1 font-black text-[11px] border-t border-neutral-300">
+                        VALOR TOTAL: {formatCurrency(grossTotal)} ({numberToSpanishWords(grossTotal)} DÓLARES)
+                      </div>
                     </div>
-                    <div className="border-t-2 border-neutral-900 pt-2">
-                      <strong className="uppercase">{clientName}</strong>
-                      <p>C.I.: {clientIdCard}</p>
-                      <p className="font-bold uppercase tracking-tighter">EL COMPRADOR</p>
+                  </div>
+
+                  {/* CLÁUSULA TERCERA: COMPRAVENTA */}
+                  <div className="space-y-1">
+                    <p className="text-justify leading-relaxed">
+                      <strong>TERCERA.- COMPRAVENTA:</strong> El propietario vende los objetos detallados en la cláusula que antecede al comprador, reservándose el derecho de dominio que tiene sobre ellos hasta la total cancelación del precio estipulado; es decir, que la venta se perfeccionará en el instante exacto en que sea cubierta la totalidad del precio pactado.
+                    </p>
+                  </div>
+
+                  {/* CLÁUSULA CUARTA: PRECIO Y FINANCIAMIENTO */}
+                  <div className="space-y-1">
+                    <p className="text-justify leading-relaxed">
+                      <strong>CUARTA.- PRECIO Y FORMA DE PAGO:</strong> El precio pactado por los objetos materia de la compraventa es el de <strong>US $ {grossTotal.toFixed(2)} ({numberToSpanishWords(grossTotal)} DÓLARES AMERICANOS)</strong>, el cual se pagará de la siguiente forma: una cuota inicial (entrada) de <strong>US $ {downPayment.toFixed(2)} ({numberToSpanishWords(downPayment)} DÓLARES AMERICANOS)</strong> a la firma de este contrato, y el saldo restante de <strong>US $ {netFinancedAmount.toFixed(2)} ({numberToSpanishWords(netFinancedAmount)} DÓLARES AMERICANOS)</strong> financiado en <strong>{installmentsCount}</strong> dividendos con frecuencia <strong>{frequency}</strong> según la tabla adjunta, por el que se han suscrito las correspondientes obligaciones cambiarias:
+                    </p>
+
+                    {/* Tabla de amortización que incluye Cuota 0 */}
+                    <div className="my-2 border border-neutral-300 rounded overflow-hidden">
+                      <table className="w-full text-center border-collapse text-[10px]">
+                        <thead>
+                          <tr className="bg-neutral-900 text-white font-bold print:bg-neutral-900 print:text-white">
+                            <th className="py-1 px-2 border-r border-neutral-700 w-16"># Cuota</th>
+                            <th className="py-1 px-2 border-r border-neutral-700 w-28">Fecha Vence</th>
+                            <th className="py-1 px-2 border-r border-neutral-700 text-right w-28">Dividendo</th>
+                            <th className="py-1 px-2 text-left pl-3">Detalle de Obligación</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {amortizationTable.map((row, rIdx) => (
+                            <tr key={rIdx} className={rIdx === 0 ? "bg-amber-50/80 font-bold border-b border-neutral-300" : "border-b border-neutral-200 even:bg-neutral-50/50"}>
+                              <td className="py-0.5 px-2 border-r border-neutral-200 font-mono">{row.number}</td>
+                              <td className="py-0.5 px-2 border-r border-neutral-200 font-mono">{formatAmortizationDate(row.dueDate)}</td>
+                              <td className="py-0.5 px-2 border-r border-neutral-200 text-right font-mono font-bold">{formatCurrency(row.amount)}</td>
+                              <td className="py-0.5 px-2 text-left pl-3">{row.description}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-neutral-100 font-black border-t-2 border-neutral-800">
+                            <td colSpan={2} className="py-1 px-2 text-right uppercase">Suma Total del Contrato:</td>
+                            <td className="py-1 px-2 text-right font-mono text-neutral-900 font-black">{formatCurrency(grossTotal)}</td>
+                            <td className="py-1 px-2 text-left pl-3 text-[9px] text-neutral-600">Totalmente cancelado al liquidar el último dividendo</td>
+                          </tr>
+                        </tfoot>
+                      </table>
                     </div>
+
+                    <p className="text-justify leading-relaxed">
+                      {guarantorName ? (
+                        <>
+                          La misma que se encuentra afianzada y garantizada solidariamente por el señor(a) <strong>{guarantorName}</strong>, con Cédula de Identidad N° <strong>{guarantorIdCard}</strong>, con domicilio en <strong>{guarantorAddress}</strong>, quien se somete expresamente a todas las estipulaciones de este contrato.
+                        </>
+                      ) : (
+                        <>
+                          La presente obligación ha sido aprobada bajo la responsabilidad patrimonial y solvencia exclusiva de <strong>EL COMPRADOR</strong> en calidad de deudor principal, sin que se requiera codeudor solidario.
+                        </>
+                      )}
+                    </p>
+                  </div>
+
+                  {/* CLÁUSULA QUINTA: RECEPCIÓN */}
+                  <div className="space-y-1">
+                    <p className="text-justify leading-relaxed">
+                      <strong>QUINTA.- RECEPCIÓN:</strong> Lo descrito en la cláusula segunda lo ha recibido el comprador a su entera satisfacción y deberá conservarlo y mantenerlo durante la vigencia del contrato en su domicilio antes mencionado, con la obligación ineludible de notificar al vendedor el cambio de su domicilio o residencia, a más tardar en ocho (8) días posteriores a dicho cambio. En ningún caso podrá el comprador sacar fuera del país lo que es objeto de este contrato, ni entregarlo a otras personas sin autorización escrita del vendedor.
+                    </p>
+                  </div>
+
+                  {/* CLÁUSULA SEXTA: RESERVA DE DOMINIO */}
+                  <div className="space-y-1">
+                    <p className="text-justify leading-relaxed">
+                      <strong>SEXTA.- RESERVA DE DOMINIO:</strong> El vendedor se reserva el dominio de lo vendido hasta que el comprador haya pagado la totalidad del precio. El comprador adquirirá el dominio, esto es, será dueño de la cosa vendida únicamente cuando haya pagado la totalidad del precio y podrá entonces pedir al vendedor que le otorgue el respectivo título de propiedad. Sin embargo, el comprador asume los riesgos que corra tal cosa desde la fecha de este contrato por haberla recibido en poder del vendedor. En consecuencia, el comprador no podrá verificar contrato alguno de venta, permuta, arriendo, cesión ni constituir gravamen alguno sobre los bienes objeto de este instrumento.
+                    </p>
+                  </div>
+
+                  {/* CLÁUSULA SÉPTIMA: FALTA DE PAGO */}
+                  <div className="space-y-1">
+                    <p className="text-justify leading-relaxed">
+                      <strong>SEPTIMA.- FALTA DE PAGO:</strong> Si el comprador no pagare uno de los documentos o cuotas indicados en este contrato, el vendedor tiene derecho a dar por vencidos los plazos fijados y exigir el pago inmediato del saldo adeudado, devengándose desde la fecha de mora la <strong>tasa máxima de interés moratorio permitida por la regulación del Banco Central del Ecuador</strong>, más las costas procesales y honorarios profesionales que ocasione su cobro judicial o extrajudicial. Asimismo, el vendedor tiene la opción de proceder en cualquiera de las siguientes formas:
+                    </p>
+                    <div className="pl-3 space-y-1 text-justify leading-relaxed">
+                      <p>
+                        <strong>1)</strong> Acudir a un Juez presentando el respectivo contrato y certificado otorgado por el registrador de la propiedad o mercantil para que el Juez disponga que uno de los alguaciles aprehenda las cosas materia de este contrato dondequiera que se encuentren y las entregue al vendedor. En este caso, las cuotas parciales pagadas en concepto de precio y la cuota de contado quedarán a beneficio del vendedor a título de indemnización, pero esta en ningún caso podrá exceder de la <strong>tercera parte (1/3)</strong> del precio fijado en el contrato; si las cantidades abonadas excedieren de la tercera parte, el vendedor devolverá dicho exceso al comprador. Sin embargo, el comprador podrá recuperar los objetos adquiridos si dentro de los quince (15) días posteriores a dicho vencimiento se pone al día en el pago de sus cuotas u ofrece suficiente garantía a satisfacción del vendedor; o,
+                      </p>
+                      <p>
+                        <strong>2)</strong> Pedir que el Juez disponga el remate de los objetos vendidos de acuerdo con lo dispuesto en el Art. 59 del Código de Comercio a que se refiere el artículo No. 10 enumeradas de la Ley de "La venta con reserva de dominio" y las disposiciones pertinentes del Código Orgánico General de Procesos, pudiendo además proceder el vendedor conforme el trámite establecido para el remate de la prenda comercial. El producto del remate se aplicará al pago de las cuotas vencidas y a cubrir además los gastos del remate y judiciales, debiendo entregarse al comprador el saldo que hubiere. Si dicho producto no alcanzare a cubrir el valor del crédito, el vendedor podrá iniciar una nueva acción contra el comprador y/o su garante solidario para obtener la cancelación del saldo que le quedare adeudando inclusive los gastos judiciales y honorarios.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* CLÁUSULA OCTAVA: LEGISLACIÓN */}
+                  <div className="space-y-1">
+                    <p className="text-justify leading-relaxed">
+                      <strong>OCTAVA.- LEGISLACION:</strong> En todo cuanto no estuviere previsto en este contrato se someten las partes a la Ley sobre ventas con reserva de dominio y al Código de Comercio, la cual las partes declaran conocerla plenamente. Para constancia suscribe este contrato en tres (3) ejemplares de igual tenor, uno para cada parte y el tercer ejemplar para el Registro de la Propiedad o Registro Mercantil donde deberán inscribirse en el libro respectivo.
+                    </p>
+                  </div>
+
+                  {/* CLÁUSULA NOVENA: JURISDICCIÓN */}
+                  <div className="space-y-1">
+                    <p className="text-justify leading-relaxed">
+                      <strong>NOVENA.- JURISDICCION:</strong> Los contratantes para efectos de este contrato y de cualquier reclamación judicial derivada del mismo, renuncian expresamente a fuero y domicilio, y se someten expresamente a los jueces competentes del cantón <strong>{jurisdictionCanton}</strong> y al trámite ejecutivo o sumario a elección del actor.
+                    </p>
+                  </div>
+
+                  {/* BLOQUE DE FIRMAS */}
+                  <div className={guarantorName ? "grid grid-cols-3 gap-8 pt-12 text-center text-[10px]" : "grid grid-cols-2 gap-16 pt-12 text-center text-[10px]"}>
+                    <div className="space-y-1">
+                      <div className="border-t-2 border-neutral-900 pt-1">
+                        <strong className="uppercase block text-xs">{companyName}</strong>
+                        <p className="text-[10px] text-neutral-600 font-mono">R.U.C.: {companyRuc}</p>
+                        <p className="font-bold text-[9px] uppercase tracking-wider text-neutral-800">AGENTE / VENDEDOR</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="border-t-2 border-neutral-900 pt-1">
+                        <strong className="uppercase block text-xs">{clientLastName}</strong>
+                        <strong className="uppercase block text-xs">{clientFirstName}</strong>
+                        <p className="text-[10px] text-neutral-600 font-mono">C.I. / RUC: {clientIdCard}</p>
+                        <p className="font-bold text-[9px] uppercase tracking-wider text-neutral-800">COMPRADOR</p>
+                        <p className="text-[8px] text-neutral-400">Huella Digital</p>
+                      </div>
+                      <div className="w-14 h-16 border border-neutral-300 mx-auto rounded mt-1 bg-neutral-50/50 print:bg-transparent"></div>
+                    </div>
+
+                    {guarantorName && (
+                      <div className="space-y-1">
+                        <div className="border-t-2 border-neutral-900 pt-1">
+                          <strong className="uppercase block text-xs">{guarantorName}</strong>
+                          <p className="text-[10px] text-neutral-600 font-mono">C.I.: {guarantorIdCard}</p>
+                          <p className="font-bold text-[9px] uppercase tracking-wider text-neutral-800">GARANTE</p>
+                          <p className="text-[8px] text-neutral-400">Huella Digital</p>
+                        </div>
+                        <div className="w-14 h-16 border border-neutral-300 mx-auto rounded mt-1 bg-neutral-50/50 print:bg-transparent"></div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -552,12 +873,27 @@ export const DocumentPrintCenterModal: React.FC<DocumentPrintCenterModalProps> =
                       </tr>
                     </thead>
                     <tbody>
-                      <tr className="h-20 align-top">
-                        <td className="p-3 border border-neutral-300 text-center font-black">01</td>
-                        <td className="p-3 border border-neutral-300 font-bold text-sm uppercase">{sale.article}</td>
-                        <td className="p-3 border border-neutral-300 text-right font-mono">{formatCurrency(sale.totalValue)}</td>
-                        <td className="p-3 border border-neutral-300 text-right font-mono font-black">{formatCurrency(sale.totalValue)}</td>
-                      </tr>
+                      {contractItems.map((item, idx) => (
+                        <tr key={idx} className="align-top border-b border-neutral-200">
+                          <td className="p-3 border border-neutral-300 text-center font-black">{item.quantity.toString().padStart(2, '0')}</td>
+                          <td className="p-3 border border-neutral-300 font-bold uppercase text-[11px]">
+                            {item.articleName}
+                            {item.technicalDetails && (
+                              <div className="mt-1 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[9px] text-neutral-600 font-normal normal-case">
+                                {item.technicalDetails.chassis && <span><strong>Chasis:</strong> {item.technicalDetails.chassis}</span>}
+                                {item.technicalDetails.engine && <span><strong>Motor:</strong> {item.technicalDetails.engine}</span>}
+                                {item.technicalDetails.color && <span><strong>Color:</strong> {item.technicalDetails.color}</span>}
+                                {item.technicalDetails.year && <span><strong>Año:</strong> {item.technicalDetails.year}</span>}
+                                {item.technicalDetails.brand && <span><strong>Marca:</strong> {item.technicalDetails.brand}</span>}
+                                {item.technicalDetails.model && <span><strong>Modelo:</strong> {item.technicalDetails.model}</span>}
+                                {item.technicalDetails.camv && <span className="col-span-2"><strong>CAMV:</strong> {item.technicalDetails.camv}</span>}
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-3 border border-neutral-300 text-right font-mono">{formatCurrency(item.unitPrice)}</td>
+                          <td className="p-3 border border-neutral-300 text-right font-mono font-black">{formatCurrency(item.totalPrice)}</td>
+                        </tr>
+                      ))}
                     </tbody>
                     <tfoot>
                       <tr className="bg-neutral-900 text-white font-black text-xs">

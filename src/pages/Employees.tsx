@@ -47,7 +47,9 @@ export default function Employees() {
   // Real sales and collections data for comparison
   const [salesRecords, setSalesRecords] = useState<any[]>([]);
   const [collectionRecords, setCollectionRecords] = useState<any[]>([]);
+  const [manualCollections, setManualCollections] = useState<any[]>([]);
   const [expandedSellerId, setExpandedSellerId] = useState<string | null>(null);
+  const [expandedCollectorId, setExpandedCollectorId] = useState<string | null>(null);
   
   // Search and tabs
   const [searchTerm, setSearchTerm] = useState('');
@@ -174,6 +176,14 @@ export default function Employees() {
         .map(d => ({ id: d.id, ...d.data() } as any))
         .filter(p => p.status !== 'ANULADO' && p.paymentDate && p.paymentDate.startsWith(currentMonth));
       setCollectionRecords(paymentsForMonth);
+
+      // 4. Fetch manual collections (lotes) for the month
+      const qManual = query(collection(db, 'collections'), where('enterpriseId', '==', targetEntId));
+      const snapManual = await getDocs(qManual);
+      const manualForMonth = snapManual.docs
+        .map(d => ({ id: d.id, ...d.data() } as any))
+        .filter(m => m.initialDate && m.initialDate.startsWith(currentMonth));
+      setManualCollections(manualForMonth);
 
     } catch (err) {
       console.error('Error fetching budgets and operational data:', err);
@@ -787,8 +797,189 @@ export default function Employees() {
               );
             })}
            </div>
-      </div>
-      </div>
+          </div>
+
+          {/* Sección de Rendimiento y Balance de Cobranza: Meta vs Cobranza Real Desplegables */}
+          <div className="bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-neutral-200 dark:border-neutral-800 pb-4">
+              <div>
+                <h2 className="text-lg font-bold text-neutral-900 dark:text-white flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                  Rendimiento Individual de Cobradores: Meta vs Cobranza Real
+                </h2>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                  Supervisa la recaudación mensual frente a la meta, detallando lotes de recibos manuales y pagos individuales.
+                </p>
+              </div>
+              <span className="text-xs px-3 py-1 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 font-bold rounded-lg border border-emerald-200 dark:border-emerald-800/60">
+                Período: {format(parseISO(currentMonth + '-15'), 'MMMM yyyy', { locale: es })}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {employees.filter(e => ['cobrador', 'ambos', 'supervisor_cobranza', 'supervisor_general'].includes(e.role)).map(collector => {
+                const collectorManual = manualCollections.filter(m => m.employeeId === collector.id);
+                const collectorIndividual = collectionRecords.filter(p => p.employeeId === collector.id);
+                
+                const manualTotal = collectorManual.reduce((acc, m) => acc + (m.totalCollected || 0), 0);
+                const individualTotal = collectorIndividual.reduce((acc, p) => acc + (p.amount || 0), 0);
+                const realCollectionsTotal = manualTotal + individualTotal;
+                
+                const targetGoal = budgets[collector.id]?.collectionsBudget || 0;
+                const percentage = targetGoal > 0 ? Math.min(Math.round((realCollectionsTotal / targetGoal) * 100), 200) : 0;
+                const isExpanded = expandedCollectorId === collector.id;
+
+                return (
+                  <div
+                    key={collector.id}
+                    className="bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700/80 rounded-2xl p-4 transition-all hover:shadow-md"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <h3 className="font-bold text-neutral-900 dark:text-white text-sm">
+                          {collector.name} {collector.lastName}
+                        </h3>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">
+                          {collector.role.replace('_', ' ')}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">
+                          {percentage}%
+                        </span>
+                        <p className="text-[10px] text-neutral-400">de meta</p>
+                      </div>
+                    </div>
+
+                    {/* Barra de progreso */}
+                    <div className="w-full bg-neutral-200 dark:bg-neutral-700 h-2 rounded-full overflow-hidden mb-3">
+                      <div
+                        className={`h-full transition-all duration-500 rounded-full ${
+                          percentage >= 100
+                            ? 'bg-emerald-500'
+                            : percentage >= 70
+                            ? 'bg-emerald-400'
+                            : 'bg-amber-500'
+                        }`}
+                        style={{ width: `${Math.min(percentage, 100)}%` }}
+                      />
+                    </div>
+
+                    {/* Resumen numérico */}
+                    <div className="grid grid-cols-2 gap-2 text-xs mb-3 p-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200/60 dark:border-neutral-800">
+                      <div className="col-span-1">
+                        <p className="text-[10px] text-neutral-400 font-medium">Meta Asignada</p>
+                        <p className="font-bold text-neutral-700 dark:text-neutral-300">
+                          ${targetGoal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                      <div className="col-span-1 text-right">
+                        <p className="text-[10px] text-neutral-400 font-medium">Total Recaudado</p>
+                        <p className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">
+                          ${realCollectionsTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                      <div className="col-span-2 pt-2 mt-1 border-t border-neutral-100 dark:border-neutral-800 flex justify-between items-center text-[10px]">
+                        <div className="flex flex-col">
+                          <span className="text-neutral-400 uppercase text-[8px] font-bold">Efectivo</span>
+                          <span className="text-emerald-700 dark:text-emerald-500 font-black">
+                            ${(collectorManual.reduce((acc, m) => acc + (m.cashFinal || 0), 0) + collectorIndividual.filter(p => (p.paymentMethod || 'Efectivo').toLowerCase() === 'efectivo').reduce((acc, p) => acc + (p.amount || 0), 0)).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <div className="flex flex-col text-right">
+                          <span className="text-neutral-400 uppercase text-[8px] font-bold">Transf / Dep</span>
+                          <span className="text-blue-600 dark:text-blue-400 font-black">
+                            ${(collectorManual.reduce((acc, m) => acc + (m.depositsTransfers || 0), 0) + collectorIndividual.filter(p => (p.paymentMethod || 'Efectivo').toLowerCase() !== 'efectivo').reduce((acc, p) => acc + (p.amount || 0), 0)).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Botón Desplegable */}
+                    <button
+                      type="button"
+                      onClick={() => setExpandedCollectorId(isExpanded ? null : collector.id)}
+                      className="w-full py-1.5 px-3 rounded-xl bg-white dark:bg-neutral-900 hover:bg-neutral-100 dark:hover:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 text-xs font-bold text-neutral-700 dark:text-neutral-200 flex items-center justify-between transition-colors"
+                    >
+                      <span>Detalle de cobranza ({collectorManual.length + collectorIndividual.length})</span>
+                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </button>
+
+                    {/* Listado Desplegable Mixto */}
+                    {isExpanded && (
+                      <div className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-700 space-y-2 max-h-72 overflow-y-auto pr-1">
+                        {collectorManual.length === 0 && collectorIndividual.length === 0 ? (
+                          <p className="text-[11px] text-neutral-400 text-center py-2">
+                            Sin cobranzas registradas en este mes.
+                          </p>
+                        ) : (
+                          <>
+                            {/* Lotes Manuales */}
+                            {collectorManual.map((m) => (
+                              <div
+                                key={m.id}
+                                className="p-2.5 rounded-lg bg-indigo-50/30 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/30 text-[11px]"
+                              >
+                                <div className="flex justify-between items-start mb-1">
+                                  <div className="pr-2">
+                                    <p className="font-black text-indigo-900 dark:text-indigo-300 uppercase tracking-tighter">
+                                      {m.noReceipt ? 'COBRO EN AGENCIA' : `RECIBOS: ${m.initialReceipt} AL ${m.finalReceipt}`}
+                                    </p>
+                                    <p className="text-[10px] text-neutral-500 font-medium italic">
+                                      {m.initialDate} al {m.finalDate}
+                                    </p>
+                                    {m.clientName && <p className="text-[9px] text-neutral-400 mt-0.5">Cliente: {m.clientName}</p>}
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="font-black text-indigo-600 dark:text-indigo-400 text-xs">
+                                      ${m.totalCollected?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                    </span>
+                                    <div className="text-[9px] space-y-0.5 mt-1">
+                                      <p className="text-emerald-600">Ef: ${m.cashFinal?.toFixed(2)}</p>
+                                      <p className="text-blue-600">Tr: ${m.depositsTransfers?.toFixed(2)}</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+
+                            {/* Pagos Individuales (de ventas crédito) */}
+                            {collectorIndividual.map((p) => (
+                              <div
+                                key={p.id}
+                                className="p-2.5 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200/60 dark:border-neutral-800 text-[11px] flex justify-between items-center"
+                              >
+                                <div className="truncate pr-2">
+                                  <p className="font-bold text-neutral-900 dark:text-white truncate uppercase">
+                                    {p.clientName || 'Pago Individual'}
+                                  </p>
+                                  <p className="text-[10px] text-neutral-400">
+                                    Recibo: {p.receiptNumber || 'S/N'} • {p.paymentDate}
+                                  </p>
+                                  <p className="text-[9px] text-neutral-500 italic uppercase">
+                                    Modo: {p.paymentMethod || 'Efectivo'}
+                                  </p>
+                                </div>
+                                <div className="text-right whitespace-nowrap">
+                                  <span className="font-black text-emerald-600 dark:text-emerald-400">
+                                    ${p.amount?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                  </span>
+                                  <span className="block text-[9px] font-bold text-neutral-400 uppercase tracking-widest">
+                                    INDIVIDUAL
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Modal Empleado */}
