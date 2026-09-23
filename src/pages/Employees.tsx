@@ -905,70 +905,73 @@ export default function Employees() {
                       {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </button>
 
-                    {/* Listado Desplegable Mixto */}
+                    {/* Listado Desplegable Mixto Ordenado Cronológicamente */}
                     {isExpanded && (
-                      <div className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-700 space-y-2 max-h-72 overflow-y-auto pr-1">
+                      <div className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-700 space-y-2 max-h-80 overflow-y-auto pr-1">
                         {collectorManual.length === 0 && collectorIndividual.length === 0 ? (
                           <p className="text-[11px] text-neutral-400 text-center py-2">
                             Sin cobranzas registradas en este mes.
                           </p>
                         ) : (
                           <>
-                            {/* Lotes Manuales */}
-                            {collectorManual.map((m) => (
-                              <div
-                                key={m.id}
-                                className="p-2.5 rounded-lg bg-indigo-50/30 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/30 text-[11px]"
-                              >
-                                <div className="flex justify-between items-start mb-1">
-                                  <div className="pr-2">
-                                    <p className="font-black text-indigo-900 dark:text-indigo-300 uppercase tracking-tighter">
-                                      {m.noReceipt ? 'COBRO EN AGENCIA' : `RECIBOS: ${m.initialReceipt} AL ${m.finalReceipt}`}
-                                    </p>
-                                    <p className="text-[10px] text-neutral-500 font-medium italic">
-                                      {m.initialDate} al {m.finalDate}
-                                    </p>
-                                    {m.clientName && <p className="text-[9px] text-neutral-400 mt-0.5">Cliente: {m.clientName}</p>}
-                                  </div>
-                                  <div className="text-right">
-                                    <span className="font-black text-indigo-600 dark:text-indigo-400 text-xs">
-                                      ${m.totalCollected?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                    </span>
-                                    <div className="text-[9px] space-y-0.5 mt-1">
-                                      <p className="text-emerald-600">Ef: ${m.cashFinal?.toFixed(2)}</p>
-                                      <p className="text-blue-600">Tr: ${m.depositsTransfers?.toFixed(2)}</p>
+                            {[
+                              ...collectorManual.map(m => ({ ...m, type: 'manual', date: m.initialDate })),
+                              ...collectorIndividual.map(p => ({ ...p, type: 'individual', date: p.paymentDate }))
+                            ]
+                            .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+                            .map((item) => (
+                              item.type === 'manual' ? (
+                                <div
+                                  key={item.id}
+                                  className="p-2.5 rounded-lg bg-indigo-50/30 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/30 text-[11px]"
+                                >
+                                  <div className="flex justify-between items-start mb-1">
+                                    <div className="pr-2">
+                                      <p className="font-black text-indigo-900 dark:text-indigo-300 uppercase tracking-tighter">
+                                        {item.noReceipt ? 'COBRO EN AGENCIA' : `RECIBOS: ${item.initialReceipt} AL ${item.finalReceipt}`}
+                                      </p>
+                                      <p className="text-[10px] text-neutral-500 font-medium italic">
+                                        {item.initialDate} al {item.finalDate}
+                                      </p>
+                                      {item.clientName && <p className="text-[9px] text-neutral-400 mt-0.5">Cliente: {item.clientName}</p>}
+                                    </div>
+                                    <div className="text-right">
+                                      <span className="font-black text-indigo-600 dark:text-indigo-400 text-xs">
+                                        ${item.totalCollected?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                      </span>
+                                      <div className="text-[9px] space-y-0.5 mt-1">
+                                        <p className="text-emerald-600">Ef: ${item.cashFinal?.toFixed(2)}</p>
+                                        <p className="text-blue-600">Tr: ${item.depositsTransfers?.toFixed(2)}</p>
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
-                              </div>
-                            ))}
-
-                            {/* Pagos Individuales (de ventas crédito) */}
-                            {collectorIndividual.map((p) => (
-                              <div
-                                key={p.id}
-                                className="p-2.5 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200/60 dark:border-neutral-800 text-[11px] flex justify-between items-center"
-                              >
-                                <div className="truncate pr-2">
-                                  <p className="font-bold text-neutral-900 dark:text-white truncate uppercase">
-                                    {p.clientName || 'Pago Individual'}
-                                  </p>
-                                  <p className="text-[10px] text-neutral-400">
-                                    Recibo: {p.receiptNumber || 'S/N'} • {p.paymentDate}
-                                  </p>
-                                  <p className="text-[9px] text-neutral-500 italic uppercase">
-                                    Modo: {p.paymentMethod || 'Efectivo'}
-                                  </p>
+                              ) : (
+                                <div
+                                  key={item.id}
+                                  className="p-2.5 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200/60 dark:border-neutral-800 text-[11px] flex justify-between items-center"
+                                >
+                                  <div className="truncate pr-2">
+                                    <p className="font-bold text-neutral-900 dark:text-white truncate uppercase">
+                                      {item.clientName || 'Pago Individual'}
+                                    </p>
+                                    <p className="text-[10px] text-neutral-400">
+                                      Recibo: {item.receiptNumber || 'S/N'} • {item.paymentDate}
+                                    </p>
+                                    <p className="text-[9px] text-neutral-500 italic uppercase">
+                                      Modo: {item.paymentMethod || 'Efectivo'}
+                                    </p>
+                                  </div>
+                                  <div className="text-right whitespace-nowrap">
+                                    <span className="font-black text-emerald-600 dark:text-emerald-400">
+                                      ${item.amount?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                    </span>
+                                    <span className="block text-[9px] font-bold text-neutral-400 uppercase tracking-widest">
+                                      INDIVIDUAL
+                                    </span>
+                                  </div>
                                 </div>
-                                <div className="text-right whitespace-nowrap">
-                                  <span className="font-black text-emerald-600 dark:text-emerald-400">
-                                    ${p.amount?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                  </span>
-                                  <span className="block text-[9px] font-bold text-neutral-400 uppercase tracking-widest">
-                                    INDIVIDUAL
-                                  </span>
-                                </div>
-                              </div>
+                              )
                             ))}
                           </>
                         )}

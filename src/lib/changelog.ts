@@ -11,6 +11,14 @@ export interface ChangelogRelease {
 
 export const staticChangelog: ChangelogRelease[] = [
   {
+    version: "5.45.1",
+    date: "2026-09-23",
+    changes: [
+      "Orden Cronológico en Cobranza: Se ajustó el historial de cobranza individual de los empleados para mostrar todas las transacciones (lotes manuales y pagos individuales) en estricto orden cronológico ascendente.",
+      "Optimización de Interfaz: Mejora en la visualización mixta de cobros para facilitar la trazabilidad temporal de la recaudación mensual."
+    ]
+  },
+  {
     version: "5.45.0",
     date: "2026-09-23",
     changes: [
