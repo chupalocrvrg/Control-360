@@ -1,0 +1,9 @@
+[
+  { "id": "1425d3VPnVWJQspXafS5", "name": "kiry Trennd2", "lastName": "", "role": "BODEGUERO", "email": "kirytrennd@gmail.com", "enterpriseId": "AvFXCYRHUnMZ7eCIQ5NvpPjM2Uk2", "userId": "QWefsZmnxKZKslpi8PsWPCv1LEv1", "createdAt": "2026-08-07T04:37:31.860Z" },
+  { "id": "BCujKOcWnY8IpUj3wGIQ", "name": "Almacen", "lastName": "Derick", "role": "ambos", "enterpriseId": "AvFXCYRHUnMZ7eCIQ5NvpPjM2Uk2", "userId": "AvFXCYRHUnMZ7eCIQ5NvpPjM2Uk2" },
+  { "id": "IArXkIPqQs2dkpCSEvZp", "name": "Darwin", "lastName": "Lema", "role": "ambos", "enterpriseId": "AvFXCYRHUnMZ7eCIQ5NvpPjM2Uk2", "userId": "AvFXCYRHUnMZ7eCIQ5NvpPjM2Uk2" },
+  { "id": "S74EOWLIpqK8Nfojua6I", "name": "Bryan", "lastName": "Santos", "role": "vendedor", "enterpriseId": "AvFXCYRHUnMZ7eCIQ5NvpPjM2Uk2", "userId": "AvFXCYRHUnMZ7eCIQ5NvpPjM2Uk2" },
+  { "id": "TeE6PBYUFPVgpKnUNERG", "name": "Jose", "lastName": "Idrovo", "role": "ambos", "enterpriseId": "AvFXCYRHUnMZ7eCIQ5NvpPjM2Uk2", "userId": "AvFXCYRHUnMZ7eCIQ5NvpPjM2Uk2" },
+  { "id": "Wg9Zf53b0NVxkomfxcTO", "name": "Jean", "lastName": "Moran", "role": "vendedor", "enterpriseId": "AvFXCYRHUnMZ7eCIQ5NvpPjM2Uk2", "userId": "AvFXCYRHUnMZ7eCIQ5NvpPjM2Uk2" },
+  { "id": "mklcKT63oHPDquKpcfoS", "name": "Marcelo", "lastName": "Gutama", "role": "supervisor_cobranza", "enterpriseId": "AvFXCYRHUnMZ7eCIQ5NvpPjM2Uk2", "userId": "AvFXCYRHUnMZ7eCIQ5NvpPjM2Uk2" }
+]

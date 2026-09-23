@@ -1,0 +1,384 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile containing company or personal information.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Company or person name" },
+        "ruc": { "type": "string", "description": "RUC or ID number (optional)" },
+        "phone": { "type": "string", "description": "Contact number (optional)" },
+        "email": { "type": "string", "description": "User email" },
+        "pin": { "type": "string", "description": "6-digit security PIN" },
+        "pinInactivityLimit": { "type": "number", "description": "PIN timeout in minutes" },
+        "lastPinEntry": { "type": "string", "format": "date-time" },
+        "subscriptionEnd": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["ENABLED", "DISABLED"] },
+        "role": { "type": "string", "enum": ["ADMIN", "USER"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "email", "createdAt", "pin", "status", "role", "subscriptionEnd"]
+    },
+    "Beneficiary": {
+      "title": "Beneficiary",
+      "description": "Saved beneficiaries for autocomplete.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "name": { "type": "string", "description": "Beneficiary name" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "createdAt"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Invoice details that generate checks.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "beneficiaryName": { "type": "string", "description": "Beneficiary name" },
+        "invoiceNumber": { "type": "string", "description": "Invoice number (optional)" },
+        "concept": { "type": "string", "description": "Payment concept" },
+        "totalValue": { "type": "number", "description": "Total invoice value" },
+        "discountType": { "type": "string", "enum": ["none", "percentage", "fixed"] },
+        "discountValue": { "type": "number" },
+        "retentionType": { "type": "string" },
+        "retentionPercentage": { "type": "number" },
+        "finalTotal": { "type": "number", "description": "Total to pay after discounts and retentions" },
+        "months": { "type": "number", "description": "Number of installments" },
+        "firstPaymentDate": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "beneficiaryName", "concept", "totalValue", "finalTotal", "months", "firstPaymentDate", "createdAt"]
+    },
+    "Check": {
+      "title": "Check",
+      "description": "Individual check payment.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "invoiceId": { "type": "string", "description": "Parent invoice ID" },
+        "beneficiaryName": { "type": "string", "description": "Beneficiary name" },
+        "checkNumber": { "type": "string", "description": "Check number" },
+        "concept": { "type": "string", "description": "Payment concept" },
+        "amount": { "type": "number", "description": "Check amount" },
+        "dueDate": { "type": "string", "format": "date-time", "description": "Payment due date" },
+        "status": { "type": "string", "enum": ["PENDING", "PAID", "DELETED"] },
+        "paidAt": { "type": "string", "format": "date-time" },
+        "paidBy": { "type": "string", "description": "Email of user who confirmed payment" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "invoiceId", "beneficiaryName", "checkNumber", "concept", "amount", "dueDate", "status", "createdAt"]
+    },
+    "AuditLog": {
+      "title": "Audit Log",
+      "description": "System audit logs for tracking critical actions.",
+      "type": "object",
+      "properties": {
+        "action": { "type": "string", "description": "Action performed" },
+        "details": { "type": "string", "description": "Human readable details" },
+        "targetId": { "type": "string", "description": "ID of related entity" },
+        "userId": { "type": "string", "description": "UID of actor" },
+        "userEmail": { "type": "string", "description": "Email of actor" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["action", "details", "userId", "userEmail", "timestamp"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "User settings for reports.",
+      "type": "object",
+      "properties": {
+        "recipients": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "phone": { "type": "string" },
+              "email": { "type": "string" }
+            }
+          }
+        },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "BuroReferenceBase": {
+      "title": "Buró Reference Base",
+      "description": "Saved reference bases for date comparison in Equifax rule 3.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Base name or filename" },
+        "description": { "type": "string", "description": "Optional notes or details" },
+        "recordCount": { "type": "number", "description": "Number of records in reference map" },
+        "createdBy": { "type": "string", "description": "User UID who created" },
+        "userEmail": { "type": "string", "description": "User email" },
+        "enterpriseId": { "type": "string", "description": "Enterprise UID" },
+        "recordsMap": { "type": "object", "description": "Map of clean IDs to reference data" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "recordCount", "createdBy", "enterpriseId", "createdAt"]
+    },
+    "BuroMacroConfig": {
+      "title": "Buró Macro Configuration",
+      "description": "User pasted VBA Macro script and settings for Equifax generation.",
+      "type": "object",
+      "properties": {
+        "macroCode": { "type": "string", "description": "Full VBA macro script code" },
+        "macroName": { "type": "string", "description": "Macro display title or version" },
+        "isActive": { "type": "boolean", "description": "Whether macro processing is enabled" },
+        "delimiter": { "type": "string", "description": "Detected output delimiter" },
+        "extension": { "type": "string", "description": "Output file extension (.gjm, .txt)" },
+        "createdBy": { "type": "string", "description": "User UID who created/updated" },
+        "userEmail": { "type": "string", "description": "User email" },
+        "enterpriseId": { "type": "string", "description": "Enterprise UID" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["macroCode", "enterpriseId", "createdBy", "updatedAt"]
+    },
+    "PortfolioSnapshot": {
+      "title": "Portfolio Snapshot",
+      "description": "Monthly or periodic portfolio snapshot containing debtor records and collector summaries.",
+      "type": "object",
+      "properties": {
+        "enterpriseId": { "type": "string", "description": "Enterprise UID" },
+        "month": { "type": "string", "description": "Year and month in YYYY-MM format" },
+        "snapshotType": { "type": "string", "enum": ["CARGA_GENERAL", "CORTE_INICIAL", "CORTE_FINAL"] },
+        "title": { "type": "string", "description": "Snapshot display title" },
+        "records": { "type": "array", "description": "List of portfolio client records" },
+        "totalClients": { "type": "number", "description": "Total number of client accounts" },
+        "totalAmount": { "type": "number", "description": "Total outstanding debt amount" },
+        "cutoffDate": { "type": "string", "description": "Cutoff date in YYYY-MM-DD format" },
+        "recoveredClients": { "type": "array", "description": "Clients recovered or up to date in this cutoff" },
+        "recoveredAmount": { "type": "number", "description": "Total recovered debt amount" },
+        "recoveredCount": { "type": "number", "description": "Count of recovered clients" },
+        "newClients": { "type": "array", "description": "New clients in overdue status" },
+        "newAmount": { "type": "number", "description": "Total new overdue debt amount" },
+        "newCount": { "type": "number", "description": "Count of new overdue clients" },
+        "previousSnapshotId": { "type": "string", "description": "ID of previous snapshot compared against" },
+        "hasChunks": { "type": "boolean", "description": "True if records are chunked into subcollection" },
+        "chunkCount": { "type": "number", "description": "Number of record chunk subdocuments" },
+        "bracketSummary": { "type": "object", "description": "Overdue days brackets breakdown" },
+        "collectorSummary": { "type": "object", "description": "Collector breakdown statistics" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["enterpriseId", "month", "snapshotType", "title", "totalClients", "totalAmount"]
+    },
+    "Client": {
+      "title": "Client",
+      "description": "Master client record for cash and credit customers, with Equifax fields and credit limit tracking.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "enterpriseId": { "type": "string", "description": "Enterprise UID owner" },
+        "createdBy": { "type": "string", "description": "User UID who created" },
+        "idCard": { "type": "string", "description": "ID card or RUC" },
+        "clientType": { "type": "string", "enum": ["CONTADO", "CREDITO"] },
+        "lastName": { "type": "string", "description": "Surname or Business Name" },
+        "firstName": { "type": "string", "description": "First name" },
+        "phone": { "type": "string", "description": "Phone number" },
+        "address": { "type": "string", "description": "Home address" },
+        "city": { "type": "string", "description": "City or sector" },
+        "email": { "type": "string" },
+        "creditLimit": { "type": "number", "description": "Assigned credit ceiling" },
+        "creditUsed": { "type": "number", "description": "Current active debt" },
+        "civilStatus": { "type": "string" },
+        "dependentsCount": { "type": "number" },
+        "birthPlace": { "type": "string" },
+        "birthDate": { "type": "string" },
+        "gender": { "type": "string" },
+        "educationLevel": { "type": "string" },
+        "housingType": { "type": "string" },
+        "residenceTime": { "type": "string" },
+        "landlordName": { "type": "string" },
+        "landlordPhone": { "type": "string" },
+        "workInfo": { "type": "object" },
+        "spouseInfo": { "type": "object" },
+        "references": { "type": "array" },
+        "guarantorClientId": { "type": "string" },
+        "guarantorName": { "type": "string" },
+        "guarantorIdCard": { "type": "string" },
+        "guarantorPhone": { "type": "string" },
+        "status": { "type": "string", "enum": ["ACTIVO", "INACTIVO", "BLOQUEADO"] },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["enterpriseId", "idCard", "clientType", "lastName", "firstName", "phone", "address", "city", "creditLimit"]
+    },
+    "CreditSale": {
+      "title": "CreditSale",
+      "description": "Credit contracts, promissory notes and amortization schedules.",
+      "type": "object",
+      "properties": {
+        "enterpriseId": { "type": "string" },
+        "promissoryNoteNumber": { "type": "string" },
+        "clientId": { "type": "string" },
+        "clientName": { "type": "string" },
+        "clientIdCard": { "type": "string" },
+        "clientPhone": { "type": "string" },
+        "guarantorName": { "type": "string" },
+        "guarantorIdCard": { "type": "string" },
+        "guarantorPhone": { "type": "string" },
+        "saleDate": { "type": "string" },
+        "article": { "type": "string" },
+        "cashPrice": { "type": "number" },
+        "downPayment": { "type": "number" },
+        "netFinancedAmount": { "type": "number" },
+        "interestRate": { "type": "number" },
+        "installmentsCount": { "type": "number" },
+        "installmentAmount": { "type": "number" },
+        "paymentFrequency": { "type": "string" },
+        "firstDueDate": { "type": "string" },
+        "status": { "type": "string", "enum": ["ACTIVO", "EN_MORA", "LIQUIDADO", "ANULADO"] },
+        "remainingBalance": { "type": "number" },
+        "totalPaid": { "type": "number" },
+        "installments": { "type": "array" }
+      },
+      "required": ["enterpriseId", "promissoryNoteNumber", "clientId", "clientName", "saleDate", "netFinancedAmount", "installmentsCount", "installmentAmount", "firstDueDate", "status"]
+    },
+    "CreditPayment": {
+      "title": "CreditPayment",
+      "description": "Installment payments, receipts and settlements.",
+      "type": "object",
+      "properties": {
+        "enterpriseId": { "type": "string" },
+        "creditSaleId": { "type": "string" },
+        "receiptNumber": { "type": "string" },
+        "clientId": { "type": "string" },
+        "clientName": { "type": "string" },
+        "promissoryNoteNumber": { "type": "string" },
+        "paymentDate": { "type": "string" },
+        "amountPaid": { "type": "number" },
+        "paymentMethod": { "type": "string" },
+        "installmentNumber": { "type": "number" },
+        "isEarlySettlement": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["VALORADO", "ANULADO"] }
+      },
+      "required": ["enterpriseId", "creditSaleId", "receiptNumber", "clientId", "clientName", "paymentDate", "amountPaid", "paymentMethod", "status"]
+    },
+    "CreditCollectionLog": {
+      "title": "CreditCollectionLog",
+      "description": "Collection tracking, telephone calls, visits, WhatsApp reminders and payment promises.",
+      "type": "object",
+      "properties": {
+        "enterpriseId": { "type": "string" },
+        "creditSaleId": { "type": "string" },
+        "promissoryNoteNumber": { "type": "string" },
+        "clientId": { "type": "string" },
+        "clientName": { "type": "string" },
+        "contactType": { "type": "string", "enum": ["WHATSAPP", "LLAMADA", "VISITA", "CORREO", "OTRO"] },
+        "contactTarget": { "type": "string", "enum": ["DEUDOR", "GARANTE", "AMBOS"] },
+        "outcome": { "type": "string" },
+        "notes": { "type": "string" },
+        "promiseDate": { "type": "string" },
+        "promiseAmount": { "type": "number" },
+        "isPromiseFulfilled": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdByName": { "type": "string" }
+      },
+      "required": ["enterpriseId", "creditSaleId", "promissoryNoteNumber", "clientId", "clientName", "contactType", "contactTarget", "outcome", "createdAt"]
+    },
+    "StockMovement": {
+      "title": "StockMovement",
+      "description": "Stock movements such as invoice restocks and supplier deliveries.",
+      "type": "object",
+      "properties": {
+        "articleId": { "type": "string" },
+        "articleName": { "type": "string" },
+        "warehouseId": { "type": "string" },
+        "type": { "type": "string" },
+        "quantity": { "type": "number" },
+        "invoiceNumber": { "type": "string" },
+        "supplierName": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "userId": { "type": "string" },
+        "enterpriseId": { "type": "string" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["articleId", "warehouseId", "type", "quantity", "enterpriseId"]
+    },
+    "InventoryMovement": {
+      "title": "InventoryMovement",
+      "description": "Inventory cash sales and discharge logs.",
+      "type": "object",
+      "properties": {
+        "articleId": { "type": "string" },
+        "articleName": { "type": "string" },
+        "warehouseId": { "type": "string" },
+        "type": { "type": "string" },
+        "quantity": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "userId": { "type": "string" },
+        "enterpriseId": { "type": "string" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["articleId", "warehouseId", "type", "quantity", "enterpriseId"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profiles."
+    },
+    "beneficiaries/{docId}": {
+      "schema": "Beneficiary",
+      "description": "Saved beneficiaries."
+    },
+    "invoices/{docId}": {
+      "schema": "Invoice",
+      "description": "Invoices generating checks."
+    },
+    "checks/{docId}": {
+      "schema": "Check",
+      "description": "Individual checks."
+    },
+    "settings/{userId}": {
+      "schema": "Settings",
+      "description": "User settings."
+    },
+    "auditLogs/{docId}": {
+      "schema": "AuditLog",
+      "description": "System audit records."
+    },
+    "buro_reference_bases/{docId}": {
+      "schema": "BuroReferenceBase",
+      "description": "Saved reference bases for Equifax processing."
+    },
+    "buro_macro_configs/{docId}": {
+      "schema": "BuroMacroConfig",
+      "description": "Saved VBA Macro script configurations for Equifax."
+    },
+    "portfolio_snapshots/{docId}": {
+      "schema": "PortfolioSnapshot",
+      "description": "Credit portfolio snapshots and debt aging analysis."
+    },
+    "clients/{docId}": {
+      "schema": "Client",
+      "description": "Master client records for cash and credit customers."
+    },
+    "credit_sales/{docId}": {
+      "schema": "CreditSale",
+      "description": "Credit sales, promissory contracts and installment amortization schedules."
+    },
+    "credit_payments/{docId}": {
+      "schema": "CreditPayment",
+      "description": "Installment payment receipts and early settlement vouchers."
+    },
+    "credit_collection_logs/{docId}": {
+      "schema": "CreditCollectionLog",
+      "description": "Audit trails of collection efforts, WhatsApp messages, calls and payment commitments."
+    },
+    "stock_movements/{docId}": {
+      "schema": "StockMovement",
+      "description": "Stock movements such as invoice restocks and supplier deliveries."
+    },
+    "inventory_movements/{docId}": {
+      "schema": "InventoryMovement",
+      "description": "Inventory cash sales and discharge logs."
+    }
+  }
+}

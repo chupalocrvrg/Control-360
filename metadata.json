@@ -1,0 +1,8 @@
+{
+  "name": "Control Financiero",
+  "description": "Sistema integral de control financiero, presupuestos comerciales, auditoría y análisis de evolución de cartera por cortes de mora.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

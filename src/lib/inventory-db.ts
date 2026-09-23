@@ -1,0 +1,1200 @@
+import { db } from '../firebase';
+import { 
+  collection, 
+  doc, 
+  getDoc, 
+  getDocs, 
+  runTransaction, 
+  query, 
+  where, 
+  addDoc, 
+  Timestamp 
+} from 'firebase/firestore';
+
+export function normalizeArticleData(data: any, id: string): any {
+  const name =
+    data?.name ||
+    data?.computedName ||
+    data?.nombre ||
+    data?.description ||
+    [data?.category, data?.brand, data?.model].filter(Boolean).join(' ') ||
+    'Artículo sin Nombre';
+
+  return {
+    id,
+    ...data,
+    name,
+    quantity: typeof data?.quantity === 'number' ? data.quantity : 0,
+    minStockAlert: typeof data?.minStockAlert === 'number' ? data.minStockAlert : 5,
+    category: data?.category || '',
+    brand: data?.brand || '',
+    model: data?.model || '',
+    barcode: data?.barcode || '',
+    seriesList: Array.isArray(data?.seriesList) ? data.seriesList : []
+  };
+}
+
+/**
+ * Helper to fetch documents from an inventory collection (articles, warehouses, warehouse_inventory, etc.)
+ * matching any of the user's target IDs (primary enterpriseId, auth user UID, profile enterpriseId).
+ * Ensures documents created by staff/bodegueros prior to linking or under alternate user IDs are seamlessly retrieved.
+ */
+export async function fetchInventoryCollection<T>(
+  collectionName: string,
+  primaryEnterpriseId: string,
+  userUid?: string,
+  profileEnterpriseId?: string
+): Promise<T[]> {
+  const targetIds = Array.from(
+    new Set(
+      [primaryEnterpriseId, userUid, profileEnterpriseId]
+        .filter((id): id is string => Boolean(id && typeof id === 'string' && id.trim() !== ''))
+    )
+  );
+
+  const resultMap = new Map<string, T>();
+
+  const processDoc = (docSnap: any) => {
+    const data = docSnap.data();
+    if (collectionName === 'articles') {
+      resultMap.set(docSnap.id, normalizeArticleData(data, docSnap.id) as T);
+    } else {
+      resultMap.set(docSnap.id, { id: docSnap.id, ...data } as T);
+    }
+  };
+
+  // 1. Perform targeted field queries for all target IDs in parallel
+  if (targetIds.length > 0) {
+    const queryPromises: Promise<any>[] = [];
+    for (const id of targetIds) {
+      queryPromises.push(getDocs(query(collection(db, collectionName), where('userId', '==', id))));
+      queryPromises.push(getDocs(query(collection(db, collectionName), where('enterpriseId', '==', id))));
+      queryPromises.push(getDocs(query(collection(db, collectionName), where('createdBy', '==', id))));
+    }
+
+    const snapshots = await Promise.all(
+      queryPromises.map(p => p.catch(() => null))
+    );
+
+    snapshots.forEach(snap => {
+      if (snap && 'docs' in snap) {
+        snap.docs.forEach((docSnap: any) => {
+          processDoc(docSnap);
+        });
+      }
+    });
+  }
+
+  return Array.from(resultMap.values());
+}
+
+/**
+ * Ensures that any article referenced by ID (e.g. in warehouse_inventory, sales, transfers, loans)
+ * is present in the articles array. If missing, attempts to fetch it directly by document ID.
+ */
+export async function ensureArticlesLoaded<T extends { id: string }>(
+  existingArticles: T[],
+  referencedArticleIds: string[]
+): Promise<T[]> {
+  const resultMap = new Map<string, T>();
+  existingArticles.forEach(art => {
+    if (art && art.id) {
+      const normalized = normalizeArticleData(art, art.id);
+      resultMap.set(art.id, normalized as unknown as T);
+    }
+  });
+
+  const missingIds = Array.from(
+    new Set(referencedArticleIds.filter(id => Boolean(id) && typeof id === 'string' && !resultMap.has(id)))
+  );
+
+  if (missingIds.length === 0) {
+    return Array.from(resultMap.values());
+  }
+
+  const docSnaps = await Promise.all(
+    missingIds.map(id => getDoc(doc(db, 'articles', id)).catch(() => null))
+  );
+
+  docSnaps.forEach(snap => {
+    if (snap && snap.exists()) {
+      const normalized = normalizeArticleData(snap.data(), snap.id);
+      resultMap.set(snap.id, normalized as unknown as T);
+    }
+  });
+
+  return Array.from(resultMap.values());
+}
+
+/**
+ * Adjusts the stock of a specific article in a warehouse and updates its total global stock.
+ * Uses Firestore runTransaction to prevent race conditions.
+ */
+export async function adjustStockAndGlobalQuantity(
+  _batchOrDummy: any,
+  warehouseId: string,
+  articleId: string,
+  quantityChange: number,
+  userId: string,
+  seriesListChange?: string[]
+) {
+  await runTransaction(db, async (transaction) => {
+    const invId = `${warehouseId}_${articleId}`;
+    const invRef = doc(db, 'warehouse_inventory', invId);
+    const articleRef = doc(db, 'articles', articleId);
+
+    // Phase 1: Reads
+    const invSnap = await transaction.get(invRef);
+    const articleSnap = await transaction.get(articleRef);
+
+    let currentInvQty = 0;
+    let currentInvSeries: string[] = [];
+    if (invSnap.exists()) {
+      currentInvQty = invSnap.data().quantity || 0;
+      currentInvSeries = invSnap.data().seriesList || [];
+    }
+    
+    const newInvQty = currentInvQty + quantityChange;
+    let newInvSeries = [...currentInvSeries];
+    if (seriesListChange && seriesListChange.length > 0) {
+      if (quantityChange > 0) {
+        newInvSeries = [...newInvSeries, ...seriesListChange];
+      } else {
+        newInvSeries = newInvSeries.filter(s => !seriesListChange.includes(s));
+      }
+    }
+
+    // Phase 2: Writes
+    transaction.set(invRef, {
+      id: invId,
+      warehouseId,
+      articleId,
+      quantity: newInvQty,
+      seriesList: newInvSeries,
+      userId,
+      enterpriseId: userId
+    }, { merge: true });
+
+    if (articleSnap.exists()) {
+      const currentGlobalQty = articleSnap.data().quantity || 0;
+      const newGlobalQty = currentGlobalQty + quantityChange;
+      
+      let currentGlobalSeries = articleSnap.data().seriesList || [];
+      let newGlobalSeries = [...currentGlobalSeries];
+      if (seriesListChange && seriesListChange.length > 0) {
+        if (quantityChange > 0) {
+          newGlobalSeries = [...newGlobalSeries, ...seriesListChange];
+        } else {
+          newGlobalSeries = newGlobalSeries.filter(s => !seriesListChange.includes(s));
+        }
+      }
+
+      transaction.update(articleRef, { quantity: newGlobalQty, seriesList: newGlobalSeries });
+    }
+  });
+}
+
+/**
+ * Executes a warehouse-to-warehouse stock transfer atomically via runTransaction.
+ * Consolidates duplicate articles across rows to prevent race conditions and lost updates.
+ */
+export async function executeTransfer(
+  userId: string,
+  fromWarehouseId: string,
+  toWarehouseId: string,
+  articlesList: Array<{ articleId: string; quantity: number; seriesList?: string[] }>,
+  reason: string,
+  comment: string
+) {
+  await runTransaction(db, async (transaction) => {
+    // Consolidate rows with duplicate articleId to prevent read/write overwrite bugs
+    const aggregatedMap = new Map<string, { articleId: string; totalQty: number; allSeries: string[] }>();
+    for (const item of articlesList) {
+      if (!item.articleId || item.quantity <= 0) continue;
+      const existing = aggregatedMap.get(item.articleId) || { articleId: item.articleId, totalQty: 0, allSeries: [] };
+      existing.totalQty += item.quantity;
+      if (item.seriesList && item.seriesList.length > 0) {
+        existing.allSeries.push(...item.seriesList);
+      }
+      aggregatedMap.set(item.articleId, existing);
+    }
+    const consolidatedList = Array.from(aggregatedMap.values());
+
+    // 1. Reads
+    const fromRef = doc(db, 'warehouses', fromWarehouseId);
+    const toRef = doc(db, 'warehouses', toWarehouseId);
+    const fromSnap = await transaction.get(fromRef);
+    const toSnap = await transaction.get(toRef);
+    const fromName = fromSnap.exists() ? fromSnap.data().name : 'Desconocida';
+    const toName = toSnap.exists() ? toSnap.data().name : 'Desconocida';
+
+    const detailedArticles: any[] = [];
+    const itemReads: any[] = [];
+
+    // Detailed articles for log
+    for (const item of articlesList) {
+      const artSnap = await transaction.get(doc(db, 'articles', item.articleId));
+      const artName = artSnap.exists() ? artSnap.data().name : 'Artículo';
+      const artSeries = artSnap.exists() ? artSnap.data().series || '' : '';
+      detailedArticles.push({
+        articleId: item.articleId,
+        name: artName,
+        quantity: item.quantity,
+        series: artSeries
+      });
+    }
+
+    // Consolidated reads for inventory state
+    for (const item of consolidatedList) {
+      const artRef = doc(db, 'articles', item.articleId);
+      const artSnap = await transaction.get(artRef);
+
+      const fromInvRef = doc(db, 'warehouse_inventory', `${fromWarehouseId}_${item.articleId}`);
+      const toInvRef = doc(db, 'warehouse_inventory', `${toWarehouseId}_${item.articleId}`);
+
+      const fromInvSnap = await transaction.get(fromInvRef);
+      const toInvSnap = await transaction.get(toInvRef);
+
+      itemReads.push({
+        item,
+        artRef,
+        artSnap,
+        fromInvRef,
+        fromInvSnap,
+        toInvRef,
+        toInvSnap
+      });
+    }
+
+    // 2. Writes
+    for (const read of itemReads) {
+      // From warehouse: deduct consolidated quantity (clamp to min 0)
+      const fromQty = read.fromInvSnap.exists() ? read.fromInvSnap.data().quantity || 0 : 0;
+      let fromSeries = read.fromInvSnap.exists() ? read.fromInvSnap.data().seriesList || [] : [];
+      if (read.item.allSeries.length > 0) {
+        fromSeries = fromSeries.filter((s: string) => !read.item.allSeries.includes(s));
+      }
+      transaction.set(read.fromInvRef, {
+        id: `${fromWarehouseId}_${read.item.articleId}`,
+        warehouseId: fromWarehouseId,
+        articleId: read.item.articleId,
+        quantity: Math.max(0, fromQty - read.item.totalQty),
+        seriesList: fromSeries,
+        userId,
+        enterpriseId: userId
+      }, { merge: true });
+
+      // To warehouse: add consolidated quantity
+      const toQty = read.toInvSnap.exists() ? read.toInvSnap.data().quantity || 0 : 0;
+      let toSeries = read.toInvSnap.exists() ? read.toInvSnap.data().seriesList || [] : [];
+      if (read.item.allSeries.length > 0) {
+        toSeries = [...toSeries, ...read.item.allSeries];
+      }
+      transaction.set(read.toInvRef, {
+        id: `${toWarehouseId}_${read.item.articleId}`,
+        warehouseId: toWarehouseId,
+        articleId: read.item.articleId,
+        quantity: toQty + read.item.totalQty,
+        seriesList: toSeries,
+        userId,
+        enterpriseId: userId
+      }, { merge: true });
+    }
+
+    const transferRef = doc(collection(db, 'transfers'));
+    transaction.set(transferRef, {
+      fromWarehouseId,
+      fromWarehouseName: fromName,
+      toWarehouseId,
+      toWarehouseName: toName,
+      articles: detailedArticles,
+      reason,
+      comment,
+      timestamp: Timestamp.now(),
+      userId,
+      enterpriseId: userId
+    });
+  });
+}
+
+/**
+ * Executes a Loan or Return from a commercial house atomically via runTransaction.
+ * Consolidates duplicate article rows to ensure exact aggregate stock calculations.
+ */
+export async function executeLoanReturn(
+  userId: string,
+  type: 'LOAN' | 'RETURN',
+  commercialHouse: string,
+  warehouseId: string,
+  isDirectSale: boolean,
+  articlesList: Array<{ articleId: string; quantity: number; seriesList?: string[] }>,
+  personName: string,
+  comment: string
+) {
+  await runTransaction(db, async (transaction) => {
+    let warehouseName = 'Venta Directa';
+    if (warehouseId) {
+      const whSnap = await transaction.get(doc(db, 'warehouses', warehouseId));
+      warehouseName = whSnap.exists() ? whSnap.data().name : 'Desconocida';
+    }
+
+    // Consolidate rows with duplicate articleId
+    const aggregatedMap = new Map<string, { articleId: string; totalQty: number; allSeries: string[] }>();
+    for (const item of articlesList) {
+      if (!item.articleId || item.quantity <= 0) continue;
+      const existing = aggregatedMap.get(item.articleId) || { articleId: item.articleId, totalQty: 0, allSeries: [] };
+      existing.totalQty += item.quantity;
+      if (item.seriesList && item.seriesList.length > 0) {
+        existing.allSeries.push(...item.seriesList);
+      }
+      aggregatedMap.set(item.articleId, existing);
+    }
+    const consolidatedList = Array.from(aggregatedMap.values());
+
+    const detailedArticles: any[] = [];
+    const itemReads: any[] = [];
+
+    // Detailed articles for log
+    for (const item of articlesList) {
+      const artSnap = await transaction.get(doc(db, 'articles', item.articleId));
+      const artName = artSnap.exists() ? artSnap.data().name : 'Artículo';
+      const artSeries = artSnap.exists() ? artSnap.data().series || '' : '';
+      detailedArticles.push({
+        articleId: item.articleId,
+        name: artName,
+        quantity: item.quantity,
+        series: artSeries
+      });
+    }
+
+    // Consolidated reads for inventory state
+    for (const item of consolidatedList) {
+      const artRef = doc(db, 'articles', item.articleId);
+      const artSnap = await transaction.get(artRef);
+
+      let invRef: any = null;
+      let invSnap: any = null;
+      if (warehouseId) {
+        invRef = doc(db, 'warehouse_inventory', `${warehouseId}_${item.articleId}`);
+        invSnap = await transaction.get(invRef);
+      }
+
+      itemReads.push({ item, artRef, artSnap, invRef, invSnap });
+    }
+
+    // Consolidated writes
+    for (const read of itemReads) {
+      const qty = read.item.totalQty;
+      if (type === 'LOAN') {
+        if (!isDirectSale && read.invRef && read.invSnap) {
+          const curQty = read.invSnap.exists() ? read.invSnap.data().quantity || 0 : 0;
+          let curSeries = read.invSnap.exists() ? read.invSnap.data().seriesList || [] : [];
+          if (read.item.allSeries.length > 0) {
+            curSeries = [...curSeries, ...read.item.allSeries];
+          }
+          transaction.set(read.invRef, {
+            id: `${warehouseId}_${read.item.articleId}`,
+            warehouseId,
+            articleId: read.item.articleId,
+            quantity: curQty + qty,
+            seriesList: curSeries,
+            userId,
+            enterpriseId: userId
+          }, { merge: true });
+
+          if (read.artSnap.exists()) {
+            const curGlobalQty = read.artSnap.data().quantity || 0;
+            let curGlobalSeries = read.artSnap.data().seriesList || [];
+            if (read.item.allSeries.length > 0) {
+              curGlobalSeries = [...curGlobalSeries, ...read.item.allSeries];
+            }
+            transaction.update(read.artRef, { quantity: curGlobalQty + qty, seriesList: curGlobalSeries });
+          }
+        } else {
+          if (read.artSnap.exists()) {
+            const curGlobalQty = read.artSnap.data().quantity || 0;
+            transaction.update(read.artRef, { quantity: curGlobalQty + qty });
+          }
+        }
+      } else {
+        // RETURN (Deduction with safe clamping)
+        if (read.invRef && read.invSnap) {
+          const curQty = read.invSnap.exists() ? read.invSnap.data().quantity || 0 : 0;
+          let curSeries = read.invSnap.exists() ? read.invSnap.data().seriesList || [] : [];
+          if (read.item.allSeries.length > 0) {
+            curSeries = curSeries.filter((s: string) => !read.item.allSeries.includes(s));
+          }
+          transaction.set(read.invRef, {
+            id: `${warehouseId}_${read.item.articleId}`,
+            warehouseId,
+            articleId: read.item.articleId,
+            quantity: Math.max(0, curQty - qty),
+            seriesList: curSeries,
+            userId,
+            enterpriseId: userId
+          }, { merge: true });
+
+          if (read.artSnap.exists()) {
+            const curGlobalQty = read.artSnap.data().quantity || 0;
+            let curGlobalSeries = read.artSnap.data().seriesList || [];
+            if (read.item.allSeries.length > 0) {
+              curGlobalSeries = curGlobalSeries.filter((s: string) => !read.item.allSeries.includes(s));
+            }
+            transaction.update(read.artRef, {
+              quantity: Math.max(0, curGlobalQty - qty),
+              seriesList: curGlobalSeries
+            });
+          }
+        }
+      }
+    }
+
+    const docRef = doc(collection(db, 'loans_returns'));
+    transaction.set(docRef, {
+      type,
+      commercialHouse,
+      warehouseId: isDirectSale ? '' : warehouseId,
+      warehouseName: isDirectSale ? 'Venta Directa' : warehouseName,
+      isDirectSale: type === 'LOAN' ? isDirectSale : false,
+      articles: detailedArticles,
+      personName,
+      comment,
+      timestamp: Timestamp.now(),
+      userId,
+      enterpriseId: userId
+    });
+  });
+}
+
+/**
+ * Executes a sales operation atomically via runTransaction.
+ * Consolidates duplicate items per warehouse and globally, clamping negative stock safely.
+ */
+export async function executeInventorySale(
+  userId: string,
+  clientName: string,
+  sellerId: string,
+  sellerName: string,
+  soldItemsList: Array<{ articleId: string; quantity: number; warehouseId: string; isGift: boolean; seriesList?: string[] }>
+) {
+  await runTransaction(db, async (transaction) => {
+    const detailedSoldArticles: any[] = [];
+
+    // 1. Consolidate items at warehouse-level and article-level
+    const whInvMap = new Map<string, { warehouseId: string; articleId: string; totalQty: number; allSeries: string[] }>();
+    const globalArtMap = new Map<string, { articleId: string; totalQty: number; allSeries: string[] }>();
+
+    for (const item of soldItemsList) {
+      if (!item.articleId || item.quantity <= 0) continue;
+
+      const whKey = `${item.warehouseId}_${item.articleId}`;
+      const existingWh = whInvMap.get(whKey) || { warehouseId: item.warehouseId, articleId: item.articleId, totalQty: 0, allSeries: [] };
+      existingWh.totalQty += item.quantity;
+      if (item.seriesList && item.seriesList.length > 0) {
+        existingWh.allSeries.push(...item.seriesList);
+      }
+      whInvMap.set(whKey, existingWh);
+
+      const existingArt = globalArtMap.get(item.articleId) || { articleId: item.articleId, totalQty: 0, allSeries: [] };
+      existingArt.totalQty += item.quantity;
+      if (item.seriesList && item.seriesList.length > 0) {
+        existingArt.allSeries.push(...item.seriesList);
+      }
+      globalArtMap.set(item.articleId, existingArt);
+    }
+
+    // Reads for detailed log
+    for (const item of soldItemsList) {
+      const whSnap = await transaction.get(doc(db, 'warehouses', item.warehouseId));
+      const artSnap = await transaction.get(doc(db, 'articles', item.articleId));
+
+      const whName = whSnap.exists() ? whSnap.data().name : 'Desconocida';
+      const artName = artSnap.exists() ? artSnap.data().name : 'Artículo';
+
+      detailedSoldArticles.push({
+        articleId: item.articleId,
+        name: artName,
+        quantity: item.quantity,
+        warehouseId: item.warehouseId,
+        warehouseName: whName,
+        isGift: item.isGift
+      });
+    }
+
+    // Consolidated Reads & Writes for Warehouse Inventories
+    for (const entry of Array.from(whInvMap.values())) {
+      const invRef = doc(db, 'warehouse_inventory', `${entry.warehouseId}_${entry.articleId}`);
+      const invSnap = await transaction.get(invRef);
+
+      const curInvQty = invSnap.exists() ? invSnap.data().quantity || 0 : 0;
+      let curInvSeries = invSnap.exists() ? invSnap.data().seriesList || [] : [];
+      if (entry.allSeries.length > 0) {
+        curInvSeries = curInvSeries.filter((s: string) => !entry.allSeries.includes(s));
+      }
+
+      transaction.set(invRef, {
+        id: `${entry.warehouseId}_${entry.articleId}`,
+        warehouseId: entry.warehouseId,
+        articleId: entry.articleId,
+        quantity: Math.max(0, curInvQty - entry.totalQty),
+        seriesList: curInvSeries,
+        userId,
+        enterpriseId: userId
+      }, { merge: true });
+    }
+
+    // Consolidated Reads & Writes for Global Articles
+    for (const entry of Array.from(globalArtMap.values())) {
+      const artRef = doc(db, 'articles', entry.articleId);
+      const artSnap = await transaction.get(artRef);
+
+      if (artSnap.exists()) {
+        const curGlobalQty = artSnap.data().quantity || 0;
+        let curGlobalSeries = artSnap.data().seriesList || [];
+        if (entry.allSeries.length > 0) {
+          curGlobalSeries = curGlobalSeries.filter((s: string) => !entry.allSeries.includes(s));
+        }
+        transaction.update(artRef, {
+          quantity: Math.max(0, curGlobalQty - entry.totalQty),
+          seriesList: curGlobalSeries
+        });
+      }
+    }
+
+    const saleRef = doc(collection(db, 'inventory_sales'));
+    transaction.set(saleRef, {
+      clientName,
+      sellerId,
+      sellerName,
+      soldArticles: detailedSoldArticles,
+      timestamp: Timestamp.now(),
+      userId,
+      enterpriseId: userId
+    });
+  });
+}
+
+/**
+ * Reverts a warehouse stock transfer atomically via runTransaction.
+ */
+export async function revertTransfer(transferId: string, userId: string, revertReason: string) {
+  await runTransaction(db, async (transaction) => {
+    const transferRef = doc(db, 'transfers', transferId);
+    const transferSnap = await transaction.get(transferRef);
+    if (!transferSnap.exists()) {
+      throw new Error('La transferencia no existe.');
+    }
+    const data = transferSnap.data();
+    if (data.status === 'ELIMINADO') {
+      throw new Error('Esta transferencia ya fue eliminada/revertida.');
+    }
+    const fromWarehouseId = data.fromWarehouseId;
+    const toWarehouseId = data.toWarehouseId;
+    const articles = data.articles || [];
+
+    // Consolidate articles to prevent read/write overwrite
+    const aggregatedMap = new Map<string, { articleId: string; name: string; totalQty: number; allSeries: string[] }>();
+    for (const item of articles) {
+      if (!item.articleId || item.quantity <= 0) continue;
+      const existing = aggregatedMap.get(item.articleId) || { articleId: item.articleId, name: item.name || 'Artículo', totalQty: 0, allSeries: [] as string[] };
+      existing.totalQty += item.quantity;
+      if (Array.isArray(item.seriesList)) {
+        item.seriesList.forEach((s: string) => existing.allSeries.push(s));
+      }
+      aggregatedMap.set(item.articleId, existing);
+    }
+    const consolidatedList = Array.from(aggregatedMap.values());
+
+    const itemReads: any[] = [];
+    for (const item of consolidatedList) {
+      const toInvRef = doc(db, 'warehouse_inventory', `${toWarehouseId}_${item.articleId}`);
+      const fromInvRef = doc(db, 'warehouse_inventory', `${fromWarehouseId}_${item.articleId}`);
+      const artRef = doc(db, 'articles', item.articleId);
+
+      const toInvSnap = await transaction.get(toInvRef);
+      const fromInvSnap = await transaction.get(fromInvRef);
+      const artSnap = await transaction.get(artRef);
+
+      itemReads.push({ item, toInvRef, toInvSnap, fromInvRef, fromInvSnap, artRef, artSnap });
+    }
+
+    const revertedArticlesLog: Array<{ articleId: string; name: string; requested: number; actual: number }> = [];
+
+    for (const read of itemReads) {
+      const availableQty = read.toInvSnap.exists() ? read.toInvSnap.data().quantity || 0 : 0;
+      const qToRevert = Math.min(read.item.totalQty, availableQty);
+
+      revertedArticlesLog.push({
+        articleId: read.item.articleId,
+        name: read.item.name,
+        requested: read.item.totalQty,
+        actual: qToRevert
+      });
+
+      // Add back to fromWarehouse
+      const fromQty = read.fromInvSnap.exists() ? read.fromInvSnap.data().quantity || 0 : 0;
+      let fromSeries = read.fromInvSnap.exists() ? read.fromInvSnap.data().seriesList || [] : [];
+      if (read.item.allSeries.length > 0) {
+        fromSeries = [...fromSeries, ...read.item.allSeries];
+      }
+      transaction.set(read.fromInvRef, {
+        id: `${fromWarehouseId}_${read.item.articleId}`,
+        warehouseId: fromWarehouseId,
+        articleId: read.item.articleId,
+        quantity: fromQty + qToRevert,
+        seriesList: fromSeries,
+        userId,
+        enterpriseId: userId
+      }, { merge: true });
+
+      // Deduct from toWarehouse
+      let toSeries = read.toInvSnap.exists() ? read.toInvSnap.data().seriesList || [] : [];
+      if (read.item.allSeries.length > 0) {
+        toSeries = toSeries.filter((s: string) => !read.item.allSeries.includes(s));
+      }
+      transaction.set(read.toInvRef, {
+        id: `${toWarehouseId}_${read.item.articleId}`,
+        warehouseId: toWarehouseId,
+        articleId: read.item.articleId,
+        quantity: Math.max(0, availableQty - qToRevert),
+        seriesList: toSeries,
+        userId,
+        enterpriseId: userId
+      }, { merge: true });
+    }
+
+    transaction.update(transferRef, {
+      status: 'ELIMINADO',
+      revertReason,
+      revertedArticles: revertedArticlesLog,
+      revertedAt: Timestamp.now()
+    });
+  });
+}
+
+/**
+ * Reverts a loan or return atomically via runTransaction.
+ */
+export async function revertLoanReturn(loanReturnId: string, userId: string, revertReason: string) {
+  await runTransaction(db, async (transaction) => {
+    const ref = doc(db, 'loans_returns', loanReturnId);
+    const snap = await transaction.get(ref);
+    if (!snap.exists()) {
+      throw new Error('El movimiento no existe.');
+    }
+    const data = snap.data();
+    if (data.status === 'ELIMINADO') {
+      throw new Error('Este movimiento ya fue eliminado/revertida.');
+    }
+    const type = data.type;
+    const warehouseId = data.warehouseId;
+    const isDirectSale = data.isDirectSale;
+    const articles = data.articles || [];
+
+    // Consolidate articles by articleId
+    const aggregatedMap = new Map<string, { articleId: string; name: string; totalQty: number; allSeries: string[] }>();
+    for (const item of articles) {
+      if (!item.articleId || item.quantity <= 0) continue;
+      const existing = aggregatedMap.get(item.articleId) || { articleId: item.articleId, name: item.name || 'Artículo', totalQty: 0, allSeries: [] as string[] };
+      existing.totalQty += item.quantity;
+      if (Array.isArray(item.seriesList)) {
+        item.seriesList.forEach((s: string) => existing.allSeries.push(s));
+      }
+      aggregatedMap.set(item.articleId, existing);
+    }
+    const consolidatedList = Array.from(aggregatedMap.values());
+
+    const itemReads: any[] = [];
+    for (const item of consolidatedList) {
+      const artRef = doc(db, 'articles', item.articleId);
+      const artSnap = await transaction.get(artRef);
+      let invRef: any = null;
+      let invSnap: any = null;
+      if (warehouseId) {
+        invRef = doc(db, 'warehouse_inventory', `${warehouseId}_${item.articleId}`);
+        invSnap = await transaction.get(invRef);
+      }
+      itemReads.push({ item, artRef, artSnap, invRef, invSnap });
+    }
+
+    const revertedArticlesLog: Array<{ articleId: string; name: string; requested: number; actual: number }> = [];
+
+    for (const read of itemReads) {
+      const curGlobalQty = read.artSnap.exists() ? read.artSnap.data().quantity || 0 : 0;
+      if (type === 'LOAN') {
+        if (!isDirectSale && warehouseId && read.invRef && read.invSnap) {
+          const availableQty = read.invSnap.exists() ? read.invSnap.data().quantity || 0 : 0;
+          const qToRevert = Math.min(read.item.totalQty, availableQty);
+
+          revertedArticlesLog.push({
+            articleId: read.item.articleId,
+            name: read.item.name,
+            requested: read.item.totalQty,
+            actual: qToRevert
+          });
+
+          let curSeries = read.invSnap.exists() ? read.invSnap.data().seriesList || [] : [];
+          if (read.item.allSeries.length > 0) {
+            curSeries = curSeries.filter((s: string) => !read.item.allSeries.includes(s));
+          }
+
+          transaction.set(read.invRef, {
+            id: `${warehouseId}_${read.item.articleId}`,
+            warehouseId,
+            articleId: read.item.articleId,
+            quantity: Math.max(0, availableQty - qToRevert),
+            seriesList: curSeries,
+            userId,
+            enterpriseId: userId
+          }, { merge: true });
+
+          if (read.artSnap.exists()) {
+            let curGlobalSeries = read.artSnap.data().seriesList || [];
+            if (read.item.allSeries.length > 0) {
+              curGlobalSeries = curGlobalSeries.filter((s: string) => !read.item.allSeries.includes(s));
+            }
+            transaction.update(read.artRef, {
+              quantity: Math.max(0, curGlobalQty - qToRevert),
+              seriesList: curGlobalSeries
+            });
+          }
+        } else {
+          const qToRevert = Math.min(read.item.totalQty, curGlobalQty);
+          revertedArticlesLog.push({
+            articleId: read.item.articleId,
+            name: read.item.name,
+            requested: read.item.totalQty,
+            actual: qToRevert
+          });
+          transaction.update(read.artRef, { quantity: Math.max(0, curGlobalQty - qToRevert) });
+        }
+      } else {
+        // RETURN revert: add stock back
+        revertedArticlesLog.push({
+          articleId: read.item.articleId,
+          name: read.item.name,
+          requested: read.item.totalQty,
+          actual: read.item.totalQty
+        });
+        if (warehouseId && read.invRef && read.invSnap) {
+          const availableQty = read.invSnap.exists() ? read.invSnap.data().quantity || 0 : 0;
+          let curSeries = read.invSnap.exists() ? read.invSnap.data().seriesList || [] : [];
+          if (read.item.allSeries.length > 0) {
+            curSeries = [...curSeries, ...read.item.allSeries];
+          }
+          transaction.set(read.invRef, {
+            id: `${warehouseId}_${read.item.articleId}`,
+            warehouseId,
+            articleId: read.item.articleId,
+            quantity: availableQty + read.item.totalQty,
+            seriesList: curSeries,
+            userId,
+            enterpriseId: userId
+          }, { merge: true });
+
+          if (read.artSnap.exists()) {
+            let curGlobalSeries = read.artSnap.data().seriesList || [];
+            if (read.item.allSeries.length > 0) {
+              curGlobalSeries = [...curGlobalSeries, ...read.item.allSeries];
+            }
+            transaction.update(read.artRef, {
+              quantity: curGlobalQty + read.item.totalQty,
+              seriesList: curGlobalSeries
+            });
+          }
+        }
+      }
+    }
+
+    transaction.update(ref, {
+      status: 'ELIMINADO',
+      revertReason,
+      revertedArticles: revertedArticlesLog,
+      revertedAt: Timestamp.now()
+    });
+  });
+}
+
+/**
+ * Reverts an inventory sale atomically via runTransaction.
+ */
+export async function revertInventorySale(saleId: string, userId: string, revertReason: string) {
+  await runTransaction(db, async (transaction) => {
+    const ref = doc(db, 'inventory_sales', saleId);
+    const snap = await transaction.get(ref);
+    if (!snap.exists()) {
+      throw new Error('La venta no existe.');
+    }
+    const data = snap.data();
+    if (data.status === 'ELIMINADO') {
+      throw new Error('Esta venta ya fue eliminada/revertida.');
+    }
+    const soldArticles = data.soldArticles || [];
+
+    // Consolidate sold items at warehouse level and global article level
+    const whInvMap = new Map<string, { warehouseId: string; articleId: string; totalQty: number; allSeries: string[] }>();
+    const globalArtMap = new Map<string, { articleId: string; totalQty: number; allSeries: string[] }>();
+
+    for (const item of soldArticles) {
+      if (!item.articleId || item.quantity <= 0) continue;
+      const whKey = `${item.warehouseId}_${item.articleId}`;
+      const existingWh = whInvMap.get(whKey) || { warehouseId: item.warehouseId, articleId: item.articleId, totalQty: 0, allSeries: [] as string[] };
+      existingWh.totalQty += item.quantity;
+      if (Array.isArray(item.seriesList)) {
+        item.seriesList.forEach((s: string) => existingWh.allSeries.push(s));
+      }
+      whInvMap.set(whKey, existingWh);
+
+      const existingArt = globalArtMap.get(item.articleId) || { articleId: item.articleId, totalQty: 0, allSeries: [] as string[] };
+      existingArt.totalQty += item.quantity;
+      if (Array.isArray(item.seriesList)) {
+        item.seriesList.forEach((s: string) => existingArt.allSeries.push(s));
+      }
+      globalArtMap.set(item.articleId, existingArt);
+    }
+
+    // Consolidated Reads & Writes for Warehouse Inventory
+    for (const entry of Array.from(whInvMap.values())) {
+      const invRef = doc(db, 'warehouse_inventory', `${entry.warehouseId}_${entry.articleId}`);
+      const invSnap = await transaction.get(invRef);
+
+      const curInvQty = invSnap.exists() ? invSnap.data().quantity || 0 : 0;
+      let curInvSeries = invSnap.exists() ? invSnap.data().seriesList || [] : [];
+      if (entry.allSeries.length > 0) {
+        curInvSeries = [...curInvSeries, ...entry.allSeries];
+      }
+
+      transaction.set(invRef, {
+        id: `${entry.warehouseId}_${entry.articleId}`,
+        warehouseId: entry.warehouseId,
+        articleId: entry.articleId,
+        quantity: curInvQty + entry.totalQty,
+        seriesList: curInvSeries,
+        userId,
+        enterpriseId: userId
+      }, { merge: true });
+    }
+
+    // Consolidated Reads & Writes for Global Articles
+    for (const entry of Array.from(globalArtMap.values())) {
+      const articleRef = doc(db, 'articles', entry.articleId);
+      const artSnap = await transaction.get(articleRef);
+
+      if (artSnap.exists()) {
+        const curGlobalQty = artSnap.data().quantity || 0;
+        let curGlobalSeries = artSnap.data().seriesList || [];
+        if (entry.allSeries.length > 0) {
+          curGlobalSeries = [...curGlobalSeries, ...entry.allSeries];
+        }
+        transaction.update(articleRef, {
+          quantity: curGlobalQty + entry.totalQty,
+          seriesList: curGlobalSeries
+        });
+      }
+    }
+
+    transaction.update(ref, {
+      status: 'ELIMINADO',
+      revertReason,
+      revertedAt: Timestamp.now()
+    });
+  });
+}
+
+/**
+ * Creates a new article or adds stock to a matched existing article atomically via runTransaction.
+ */
+export async function saveArticleWithStockTransaction(
+  articleData: {
+    category: string;
+    brand: string;
+    model: string;
+    computedName: string;
+    requiresSeries: boolean;
+    seriesList: string[];
+    barcode: string;
+    minStockAlert: number;
+    initialQuantity: number;
+    initialWarehouseId: string;
+  },
+  matchedArticleId: string | null,
+  enterpriseId: string,
+  createdById?: string
+) {
+  if (!enterpriseId) {
+    throw new Error('Empresa no identificada. No se puede guardar el artículo.');
+  }
+
+  const safeCreatedBy = createdById || enterpriseId || '';
+
+  let resultingArticle: any = null;
+
+  await runTransaction(db, async (transaction) => {
+    let artRef;
+    let artId = matchedArticleId;
+
+    if (artId) {
+      artRef = doc(db, 'articles', artId);
+    } else {
+      artRef = doc(collection(db, 'articles'));
+      artId = artRef.id;
+    }
+
+    const invRef = articleData.initialWarehouseId
+      ? doc(db, 'warehouse_inventory', `${articleData.initialWarehouseId}_${artId}`)
+      : null;
+
+    // === PHASE 1: READS ONLY ===
+    let artSnap: any = null;
+    if (matchedArticleId) {
+      artSnap = await transaction.get(artRef);
+    }
+
+    let invSnap: any = null;
+    if (invRef) {
+      invSnap = await transaction.get(invRef);
+    }
+
+    // === PHASE 2: WRITES ONLY ===
+    if (matchedArticleId) {
+      // Matched existing article - update global quantity and seriesList
+      let currentQty = 0;
+      let currentSeriesList: string[] = [];
+      if (artSnap && artSnap.exists()) {
+        currentQty = artSnap.data().quantity || 0;
+        currentSeriesList = artSnap.data().seriesList || [];
+      }
+
+      const updatedQty = currentQty + articleData.initialQuantity;
+      const updatedSeries = [...currentSeriesList, ...articleData.seriesList];
+
+      transaction.update(artRef, {
+        quantity: updatedQty,
+        seriesList: updatedSeries
+      });
+
+      resultingArticle = {
+        id: artId,
+        ...(artSnap?.exists() ? artSnap.data() : {}),
+        quantity: updatedQty,
+        seriesList: updatedSeries
+      };
+    } else {
+      // Brand new article
+      const newArticle = {
+        name: articleData.computedName,
+        category: articleData.category,
+        brand: articleData.brand,
+        model: articleData.model,
+        requiresSeries: articleData.requiresSeries,
+        seriesList: articleData.seriesList,
+        barcode: articleData.barcode,
+        minStockAlert: articleData.minStockAlert,
+        quantity: articleData.initialQuantity,
+        userId: enterpriseId,
+        enterpriseId: enterpriseId,
+        createdBy: safeCreatedBy,
+        createdAt: Timestamp.now()
+      };
+      transaction.set(artRef, newArticle);
+      resultingArticle = {
+        id: artId,
+        ...newArticle
+      };
+    }
+
+    if (invRef && articleData.initialWarehouseId) {
+      const invId = `${articleData.initialWarehouseId}_${artId}`;
+      if (invSnap && invSnap.exists()) {
+        const existingQty = invSnap.data().quantity || 0;
+        const existingSeries = invSnap.data().seriesList || [];
+        transaction.update(invRef, {
+          quantity: existingQty + articleData.initialQuantity,
+          seriesList: [...existingSeries, ...articleData.seriesList]
+        });
+      } else {
+        transaction.set(invRef, {
+          id: invId,
+          warehouseId: articleData.initialWarehouseId,
+          articleId: artId,
+          quantity: articleData.initialQuantity,
+          seriesList: articleData.seriesList,
+          userId: enterpriseId,
+          enterpriseId: enterpriseId,
+          createdBy: safeCreatedBy
+        });
+      }
+    }
+  });
+
+  return resultingArticle;
+}
+
+/**
+ * Executes a complete Credit Sale with atomical stock deduction, client quota consumption,
+ * and portfolio credit generation.
+ */
+export async function executeCreditSaleTransaction(
+  enterpriseId: string,
+  userId: string,
+  creditSaleData: any
+): Promise<{ creditSaleId: string; promissoryNoteNumber: string }> {
+  let createdCreditId = '';
+
+  await runTransaction(db, async (transaction) => {
+    // 1. Read Client to check and update creditUsed
+    const clientRef = doc(db, 'clients', creditSaleData.clientId);
+    const clientSnap = await transaction.get(clientRef);
+    if (!clientSnap.exists()) {
+      throw new Error('El cliente seleccionado no existe en el catálogo.');
+    }
+    const clientData = clientSnap.data();
+    const currentCreditUsed = clientData.creditUsed || 0;
+    const creditLimit = clientData.creditLimit || 0;
+    const netFinanced = creditSaleData.netFinancedAmount || 0;
+
+    if (currentCreditUsed + netFinanced > creditLimit) {
+      throw new Error(`Cupo insuficiente. Cupo: $${creditLimit}, Usado actual: $${currentCreditUsed}, Solicitado: $${netFinanced}`);
+    }
+
+    // 2. Read Warehouse Inventories and Articles
+    const whInvMap = new Map<string, { warehouseId: string; articleId: string; totalQty: number; allSeries: string[] }>();
+    const globalArtMap = new Map<string, { articleId: string; totalQty: number; allSeries: string[] }>();
+
+    for (const item of (creditSaleData.items || [])) {
+      if (!item.articleId || item.quantity <= 0) continue;
+
+      const whKey = `${item.warehouseId}_${item.articleId}`;
+      const existingWh = whInvMap.get(whKey) || { warehouseId: item.warehouseId, articleId: item.articleId, totalQty: 0, allSeries: [] as string[] };
+      existingWh.totalQty += item.quantity;
+      if (item.selectedSeries && item.selectedSeries.length > 0) {
+        existingWh.allSeries.push(...(item.selectedSeries as string[]));
+      }
+      whInvMap.set(whKey, existingWh);
+
+      const existingArt = globalArtMap.get(item.articleId) || { articleId: item.articleId, totalQty: 0, allSeries: [] as string[] };
+      existingArt.totalQty += item.quantity;
+      if (item.selectedSeries && item.selectedSeries.length > 0) {
+        existingArt.allSeries.push(...(item.selectedSeries as string[]));
+      }
+      globalArtMap.set(item.articleId, existingArt);
+    }
+
+    // Read warehouse inventories
+    const invReads: any[] = [];
+    for (const entry of Array.from(whInvMap.values())) {
+      const invRef = doc(db, 'warehouse_inventory', `${entry.warehouseId}_${entry.articleId}`);
+      const invSnap = await transaction.get(invRef);
+      invReads.push({ entry, invRef, invSnap });
+    }
+
+    // Read global articles
+    const artReads: any[] = [];
+    for (const entry of Array.from(globalArtMap.values())) {
+      const artRef = doc(db, 'articles', entry.articleId);
+      const artSnap = await transaction.get(artRef);
+      artReads.push({ entry, artRef, artSnap });
+    }
+
+    // 3. Write warehouse inventory deductions
+    for (const read of invReads) {
+      const invData = read.invSnap.exists() ? read.invSnap.data() : null;
+      const matchingArt = artReads.find(a => a.entry.articleId === read.entry.articleId);
+      const fallbackArtQty = matchingArt && matchingArt.artSnap.exists() ? (Number(matchingArt.artSnap.data().quantity) || 0) : 0;
+      const curInvQty = invData ? (invData.stock ?? invData.quantity ?? 0) : fallbackArtQty;
+      let curInvSeries = invData
+        ? (Array.isArray(invData.seriesList) ? invData.seriesList : [])
+        : (matchingArt && matchingArt.artSnap.exists() && Array.isArray(matchingArt.artSnap.data().seriesList) ? matchingArt.artSnap.data().seriesList : []);
+      if (read.entry.allSeries.length > 0) {
+        curInvSeries = curInvSeries.filter((s: string) => !read.entry.allSeries.includes(s));
+      }
+
+      transaction.set(read.invRef, {
+        id: `${read.entry.warehouseId}_${read.entry.articleId}`,
+        warehouseId: read.entry.warehouseId,
+        articleId: read.entry.articleId,
+        quantity: Math.max(0, curInvQty - read.entry.totalQty),
+        stock: Math.max(0, curInvQty - read.entry.totalQty),
+        seriesList: curInvSeries,
+        userId: enterpriseId,
+        enterpriseId: enterpriseId
+      }, { merge: true });
+    }
+
+    // Write global article deductions
+    for (const read of artReads) {
+      if (read.artSnap.exists()) {
+        const curGlobalQty = read.artSnap.data().quantity || 0;
+        let curGlobalSeries = read.artSnap.data().seriesList || [];
+        if (read.entry.allSeries.length > 0) {
+          curGlobalSeries = curGlobalSeries.filter((s: string) => !read.entry.allSeries.includes(s));
+        }
+        transaction.update(read.artRef, {
+          quantity: Math.max(0, curGlobalQty - read.entry.totalQty),
+          seriesList: curGlobalSeries
+        });
+      }
+    }
+
+    // 3b. Register inventory movements (Kardex OUT) for each sold item
+    const saleDateStr = creditSaleData.createdAt ? creditSaleData.createdAt.split('T')[0] : new Date().toISOString().split('T')[0];
+    for (const item of (creditSaleData.items || [])) {
+      if (!item.articleId || item.quantity <= 0) continue;
+      const movementRef = doc(collection(db, 'inventory_movements'));
+      transaction.set(movementRef, {
+        articleId: item.articleId,
+        warehouseId: item.warehouseId,
+        type: 'OUT',
+        quantity: item.quantity,
+        reference: `Venta Crédito: ${creditSaleData.clientName || 'Cliente'} (Pagaré ${creditSaleData.promissoryNoteNumber || ''})`,
+        seriesList: item.selectedSeries || [],
+        date: saleDateStr,
+        enterpriseId,
+        createdBy: userId,
+        createdAt: new Date().toISOString()
+      });
+    }
+
+    // 4. Update Client creditUsed
+    transaction.update(clientRef, {
+      creditUsed: currentCreditUsed + netFinanced,
+      updatedAt: new Date().toISOString()
+    });
+
+    // 5. Create Credit Sale Document
+    const creditSaleRef = doc(collection(db, 'credit_sales'));
+    createdCreditId = creditSaleRef.id;
+
+    transaction.set(creditSaleRef, {
+      ...creditSaleData,
+      id: creditSaleRef.id,
+      enterpriseId,
+      createdBy: userId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    // 6. Register standard sale in 'sales' collection for unified revenue and commission reporting
+    const standardSaleRef = doc(collection(db, 'sales'));
+    transaction.set(standardSaleRef, {
+      date: creditSaleData.createdAt ? creditSaleData.createdAt.split('T')[0] : new Date().toISOString().split('T')[0],
+      type: 'credito',
+      employeeId: creditSaleData.sellerId,
+      isMoto: false,
+      motoType: null,
+      clientName: creditSaleData.clientName,
+      article: creditSaleData.items.map((i: any) => `${i.quantity}x ${i.articleName}`).join(', '),
+      totalValue: creditSaleData.grossTotal,
+      creditSaleId: creditSaleRef.id,
+      promissoryNoteNumber: creditSaleData.promissoryNoteNumber,
+      enterpriseId,
+      createdAt: Timestamp.now()
+    });
+  });
+
+  return {
+    creditSaleId: createdCreditId,
+    promissoryNoteNumber: creditSaleData.promissoryNoteNumber || ''
+  };
+}
+

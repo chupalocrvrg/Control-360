@@ -1,0 +1,16 @@
+{
+  "currency": "USD",
+  "dockMagnification": true,
+  "accentColor": "cyan",
+  "iva": 15,
+  "banks": [
+    "Banco Pichincha"
+  ],
+  "dockMagnificationType": "size",
+  "menuPosition": "bottom",
+  "liquidBackgroundType": "gradient",
+  "language": "es",
+  "dockProximity": true,
+  "uiStyle": "liquid-glass",
+  "theme": "light"
+}

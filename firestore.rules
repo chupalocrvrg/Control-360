@@ -1,0 +1,338 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // DEFAULT DENY
+    // ===============================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ===============================================================
+    // GLOBAL HELPERS
+    // ===============================================================
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && (request.auth.token.email_verified == true || request.auth.token.firebase.sign_in_provider == 'google.com');
+    }
+
+    function isAdmin() {
+      return isVerified() && (
+        request.auth.token.role == 'SUPERADMIN' ||
+        request.auth.token.role == 'ADMIN' ||
+        request.auth.token.admin == true ||
+        request.auth.token.email == 'marcelogutama3eroa@gmail.com' ||
+        request.auth.token.email == 'soporte.controlfinanciero@gmail.com' ||
+        request.auth.token.email == 'kirytrennd@gmail.com' ||
+        (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['SUPERADMIN', 'ADMIN']
+        )
+      );
+    }
+
+    function isSuperAdminFallback() {
+      return isVerified() && (
+        request.auth.token.role == 'SUPERADMIN' ||
+        request.auth.token.admin == true ||
+        request.auth.token.email == 'marcelogutama3eroa@gmail.com' ||
+        request.auth.token.email == 'soporte.controlfinanciero@gmail.com' ||
+        request.auth.token.email == 'kirytrennd@gmail.com'
+      );
+    }
+
+    function isEnterpriseData(data) {
+      return isAccountActive() && (
+        isAdmin() || 
+        isSuperAdminFallback() ||
+        ('createdBy' in data && data.createdBy == request.auth.uid) ||
+        ('userId' in data && data.userId == request.auth.uid) ||
+        ('enterpriseId' in data && data.enterpriseId == request.auth.uid) ||
+        (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+            ('userId' in data && 'enterpriseId' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.enterpriseId != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.enterpriseId != '' && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.enterpriseId == data.userId) ||
+            ('enterpriseId' in data && 'enterpriseId' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.enterpriseId != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.enterpriseId != '' && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.enterpriseId == data.enterpriseId)
+          )
+        )
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isOwner(userId) {
+      return isVerified() && (request.auth.uid == userId);
+    }
+
+    function isOwnerOrAdmin(userId) {
+      return isVerified() && (request.auth.uid == userId || isAdmin());
+    }
+
+    function isAccountActive() {
+      return isAdmin() || (
+        isVerified() && (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
+            !('status' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data) ||
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == null ||
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'ENABLED'
+          )
+        )
+      );
+    }
+
+    // ===============================================================
+    // VALIDATION BLUEPRINTS
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+             data.email is string &&
+             (!('pin' in data) || data.pin == null || (data.pin is string && (data.pin == '' || data.pin.matches('^\\d{6}$') || data.pin.matches('^[a-fA-F0-9]{64}$')))) &&
+             data.status in ['ENABLED', 'DISABLED'] &&
+             data.role in ['SUPERADMIN', 'ADMIN', 'USER', 'BODEGUERO', 'enterprise', 'employee', 'vendedor', 'cobrador'] &&
+             (!('ruc' in data) || data.ruc == null || (data.ruc is string && data.ruc.size() <= 50)) &&
+             (!('phone' in data) || data.phone == null || (data.phone is string && data.phone.size() <= 50)) &&
+             (!('lastPinEntry' in data) || data.lastPinEntry == null || data.lastPinEntry is timestamp || data.lastPinEntry is string) &&
+             (!('pinInactivityLimit' in data) || data.pinInactivityLimit == null || data.pinInactivityLimit is number) &&
+             (!('createdAt' in data) || data.createdAt == null || data.createdAt is timestamp || data.createdAt is string) &&
+             (!('subscriptionEnd' in data) || data.subscriptionEnd == null || data.subscriptionEnd is string || data.subscriptionEnd is timestamp) &&
+             (!('enterpriseId' in data) || data.enterpriseId == null || data.enterpriseId is string) &&
+             (!('employeeRole' in data) || data.employeeRole == null || data.employeeRole is string) &&
+             (!('lastLoginAt' in data) || data.lastLoginAt == null || data.lastLoginAt is timestamp || data.lastLoginAt is string) &&
+             (!('lastIp' in data) || data.lastIp == null || data.lastIp is string) &&
+             (!('photoURL' in data) || data.photoURL == null || data.photoURL is string) &&
+             (!('displayName' in data) || data.displayName == null || data.displayName is string) &&
+             (!('hasCompletedOnboarding' in data) || data.hasCompletedOnboarding == null || data.hasCompletedOnboarding is bool) &&
+             (!('termsAcceptedAt' in data) || data.termsAcceptedAt == null || data.termsAcceptedAt is string || data.termsAcceptedAt is timestamp);
+    }
+
+    function isValidBeneficiary(data) {
+      return (data.userId == request.auth.uid || isAdmin()) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidInvoice(data) {
+      return (data.userId == request.auth.uid || isAdmin()) &&
+             data.beneficiaryName is string && data.beneficiaryName.size() > 0 &&
+             data.concept is string && data.concept.size() > 0 &&
+             data.totalValue is number && data.totalValue >= 0 &&
+             data.finalTotal is number && data.finalTotal >= 0 &&
+             data.months is number && data.months > 0 &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidCheck(data) {
+      return isEnterpriseData(data) &&
+             (!('invoiceId' in data) || data.invoiceId == null || data.invoiceId is string) &&
+             (!('amount' in data) || data.amount is number) &&
+             (!('status' in data) || data.status is string);
+    }
+
+    function isValidAudit(data) {
+      return data.action is string && data.action.size() > 0 && data.action.size() <= 100 &&
+             data.details is string && data.details.size() > 0 && data.details.size() <= 2000 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.userEmail is string && data.userEmail.size() <= 200 &&
+             (!('targetId' in data) || data.targetId == null || (data.targetId is string && data.targetId.size() <= 128)) &&
+             (data.timestamp == request.time || data.timestamp is timestamp);
+    }
+
+    // ===============================================================
+    // COLLECTIONS
+    // ===============================================================
+    
+    match /users/{userId} {
+      allow get: if isOwnerOrAdmin(userId);
+      allow list: if isAdmin();
+      allow create: if isOwnerOrAdmin(userId) && isValidUser(incoming()) && (
+        isAdmin() || (incoming().role in ['USER', 'employee', 'BODEGUERO', 'enterprise'] && (!('status' in incoming()) || incoming().status == 'ENABLED'))
+      );
+      allow update: if isOwnerOrAdmin(userId) && isValidUser(incoming()) && (
+        isAdmin() || (
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'name', 'ruc', 'phone', 'pin', 'lastPinEntry', 'pinInactivityLimit',
+            'hasCompletedOnboarding', 'termsAcceptedAt', 'lastLoginAt', 'lastIp', 'photoURL', 'displayName',
+            'employeeRole', 'enterpriseId'
+          ]) &&
+          incoming().role == existing().role &&
+          (!('status' in incoming()) || incoming().status == existing().status) &&
+          (!('enterpriseId' in incoming()) || incoming().enterpriseId == existing().enterpriseId) &&
+          (!('subscriptionEnd' in incoming()) || incoming().subscriptionEnd == existing().subscriptionEnd) &&
+          (!('employeeRole' in incoming()) || incoming().employeeRole == existing().employeeRole)
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /beneficiaries/{id} {
+      allow read: if isVerified() && (resource == null || isEnterpriseData(resource.data));
+      allow delete: if isVerified() && resource != null && isEnterpriseData(resource.data);
+      allow create, update: if isVerified() && isEnterpriseData(incoming());
+    }
+
+    match /invoices/{id} {
+      allow read: if isVerified() && (resource == null || isEnterpriseData(resource.data));
+      allow delete: if isVerified() && resource != null && isEnterpriseData(resource.data);
+      allow create, update: if isVerified() && isEnterpriseData(incoming());
+    }
+
+    match /employees/{id} {
+      allow read: if isVerified() && (resource == null || isEnterpriseData(resource.data));
+      allow delete: if isVerified() && resource != null && isEnterpriseData(resource.data);
+      allow create, update: if isVerified() && isEnterpriseData(incoming());
+    }
+    match /budgets/{id} {
+      allow read: if isVerified() && (resource == null || isEnterpriseData(resource.data));
+      allow delete: if isVerified() && resource != null && isEnterpriseData(resource.data);
+      allow create, update: if isVerified() && isEnterpriseData(incoming());
+    }
+    match /sales/{id} {
+      allow read: if isVerified() && (resource == null || isEnterpriseData(resource.data));
+      allow delete: if isVerified() && resource != null && isEnterpriseData(resource.data);
+      allow create, update: if isVerified() && isEnterpriseData(incoming());
+    }
+    match /collections/{id} {
+      allow read: if isVerified() && (resource == null || isEnterpriseData(resource.data));
+      allow delete: if isVerified() && resource != null && isEnterpriseData(resource.data);
+      allow create, update: if isVerified() && isEnterpriseData(incoming());
+    }
+    match /articles/{id} {
+      allow read: if isVerified() && (resource == null || isEnterpriseData(resource.data));
+      allow delete: if isVerified() && resource != null && isEnterpriseData(resource.data);
+      allow create, update: if isVerified() && isEnterpriseData(incoming());
+    }
+    match /warehouses/{id} {
+      allow read: if isVerified() && (resource == null || isEnterpriseData(resource.data));
+      allow delete: if isVerified() && resource != null && isEnterpriseData(resource.data);
+      allow create, update: if isVerified() && isEnterpriseData(incoming());
+    }
+    match /warehouse_inventory/{id} {
+      allow read: if isVerified() && (resource == null || isEnterpriseData(resource.data));
+      allow delete: if isVerified() && resource != null && isEnterpriseData(resource.data);
+      allow create, update: if isVerified() && isEnterpriseData(incoming());
+    }
+    match /transfers/{id} {
+      allow read: if isVerified() && (resource == null || isEnterpriseData(resource.data));
+      allow delete: if isVerified() && resource != null && isEnterpriseData(resource.data);
+      allow create, update: if isVerified() && isEnterpriseData(incoming());
+    }
+    match /loans_returns/{id} {
+      allow read: if isVerified() && (resource == null || isEnterpriseData(resource.data));
+      allow delete: if isVerified() && resource != null && isEnterpriseData(resource.data);
+      allow create, update: if isVerified() && isEnterpriseData(incoming());
+    }
+    match /inventory_sales/{id} {
+      allow read: if isVerified() && (resource == null || isEnterpriseData(resource.data));
+      allow delete: if isVerified() && resource != null && isEnterpriseData(resource.data);
+      allow create, update: if isVerified() && isEnterpriseData(incoming());
+    }
+    match /stock_movements/{id} {
+      allow read: if isVerified() && (resource == null || isEnterpriseData(resource.data));
+      allow delete: if isVerified() && resource != null && isEnterpriseData(resource.data);
+      allow create, update: if isVerified() && isEnterpriseData(incoming());
+    }
+    match /inventory_movements/{id} {
+      allow read: if isVerified() && (resource == null || isEnterpriseData(resource.data));
+      allow delete: if isVerified() && resource != null && isEnterpriseData(resource.data);
+      allow create, update: if isVerified() && isEnterpriseData(incoming());
+    }
+
+    match /clients/{id} {
+      allow read: if isVerified() && (resource == null || isEnterpriseData(resource.data));
+      allow delete: if isVerified() && resource != null && isEnterpriseData(resource.data);
+      allow create, update: if isVerified() && isEnterpriseData(incoming());
+    }
+
+    match /credit_sales/{id} {
+      allow read: if isVerified() && (resource == null || isEnterpriseData(resource.data));
+      allow delete: if isVerified() && resource != null && isEnterpriseData(resource.data);
+      allow create, update: if isVerified() && isEnterpriseData(incoming());
+    }
+
+    match /credit_payments/{id} {
+      allow read: if isVerified() && (resource == null || isEnterpriseData(resource.data));
+      allow delete: if isVerified() && resource != null && isEnterpriseData(resource.data);
+      allow create, update: if isVerified() && isEnterpriseData(incoming());
+    }
+
+    match /credit_collection_logs/{id} {
+      allow read: if isVerified() && (resource == null || isEnterpriseData(resource.data));
+      allow delete: if isVerified() && resource != null && isEnterpriseData(resource.data);
+      allow create, update: if isVerified() && isEnterpriseData(incoming());
+    }
+
+    match /checks/{id} {
+      allow read: if isVerified() && (resource == null || isEnterpriseData(resource.data));
+      allow delete: if isVerified() && resource != null && isEnterpriseData(resource.data);
+      allow create, update: if isVerified() && isValidCheck(incoming());
+    }
+
+    match /settings/{userId} {
+      allow read: if isVerified() && (
+        isOwnerOrAdmin(userId) || 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.enterpriseId == userId)
+      );
+      allow write: if isOwnerOrAdmin(userId);
+    }
+    match /userSettings/{userId} {
+      allow read, write: if isOwnerOrAdmin(userId);
+    }
+
+    match /versions/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /auditLogs/{id} {
+      allow create: if (isSignedIn() || (incoming().userId is string && incoming().userEmail is string)) && isValidAudit(incoming());
+      allow get, list: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    match /system_errors/{id} {
+      allow create: if true; // Allow client-side error reporting
+      allow read, update, delete: if isAdmin();
+    }
+
+    match /buro_logs/{id} {
+      allow read, delete: if isVerified() && isEnterpriseData(resource.data);
+      allow create, update: if isVerified() && isEnterpriseData(incoming());
+    }
+
+    match /buro_reference_bases/{id} {
+      allow read, delete: if isVerified() && (resource == null || isEnterpriseData(resource.data));
+      allow create, update: if isVerified() && isEnterpriseData(incoming());
+    }
+
+    match /buro_macro_configs/{id} {
+      allow read, delete: if isVerified() && (resource == null || isEnterpriseData(resource.data));
+      allow create, update: if isVerified() && isEnterpriseData(incoming());
+    }
+
+    match /portfolio_snapshots/{id} {
+      allow read: if isVerified() && (resource == null || isEnterpriseData(resource.data));
+      allow delete: if isVerified() && resource != null && isEnterpriseData(resource.data);
+      allow create, update: if isVerified() && isEnterpriseData(incoming());
+
+      match /record_chunks/{chunkId} {
+        allow read, write, delete: if isVerified();
+      }
+    }
+  }
+}

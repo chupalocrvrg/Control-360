@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="es" prefix="og: https://ogp.me/ns#">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Control Financiero 360°</title>
+    
+    <!-- Primary Meta Tags -->
+    <meta name="title" content="Control Financiero 360°" />
+    <meta name="description" content="Plataforma empresarial de control financiero, tesorería, cobros, presupuestos comerciales, inventario y auditoría en tiempo real." />
+    <meta name="theme-color" content="#4f46e5" />
+
+    <!-- Open Graph / Facebook / WhatsApp (Optimized for WhatsApp crawler) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="es_EC" />
+    <meta property="og:url" content="https://control-de-cheques-060526.vercel.app/" />
+    <meta property="og:site_name" content="Control Financiero 360°" />
+    <meta property="og:title" content="Control Financiero 360°" />
+    <meta property="og:description" content="Plataforma empresarial de control financiero, tesorería, cobros, presupuestos comerciales, inventario y auditoría en tiempo real." />
+    <meta property="og:image" content="https://control-de-cheques-060526.vercel.app/og-image.jpg" />
+    <meta property="og:image:secure_url" content="https://control-de-cheques-060526.vercel.app/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Control Financiero 360° - Control Empresarial y Auditoría en Tiempo Real" />
+
+    <!-- Fallback PNG for high-res cards -->
+    <meta property="og:image" content="https://control-de-cheques-060526.vercel.app/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://control-de-cheques-060526.vercel.app/" />
+    <meta name="twitter:title" content="Control Financiero 360°" />
+    <meta name="twitter:description" content="Plataforma empresarial de control financiero, tesorería, cobros, presupuestos comerciales, inventario y auditoría en tiempo real." />
+    <meta name="twitter:image" content="https://control-de-cheques-060526.vercel.app/og-image.png" />
+    <meta name="twitter:image:alt" content="Control Financiero 360° - Control Empresarial y Auditoría en Tiempo Real" />
+
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+
+    <!-- Global Error Suppression for External Extension Noise (MetaMask, Web3) -->
+    <script>
+      (function() {
+        const filteredStrings = ['metamask', 'ethereum', 'web3', 'failed to connect to metamask', 'extension', 'wallet'];
+        const filterFn = (args) => {
+          const msg = Array.from(args).join(' ').toLowerCase();
+          return filteredStrings.some(str => msg.includes(str));
+        };
+
+        // Suppress console methods
+        ['error', 'warn', 'info', 'debug'].forEach(method => {
+          const original = console[method];
+          console[method] = function() {
+            if (filterFn(arguments)) return;
+            original.apply(console, arguments);
+          };
+        });
+
+        // Suppress window.onerror
+        const originalOnerror = window.onerror;
+        window.onerror = function(message) {
+          const msg = String(message).toLowerCase();
+          if (filteredStrings.some(str => msg.includes(str))) return true;
+          if (originalOnerror) return originalOnerror.apply(window, arguments);
+        };
+
+        // Suppress unhandledrejection
+        window.addEventListener('unhandledrejection', function(event) {
+          const reason = event.reason;
+          const msg = String(reason?.message || reason || '').toLowerCase();
+          if (filteredStrings.some(str => msg.includes(str))) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }, true);
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
