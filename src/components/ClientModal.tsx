@@ -15,7 +15,11 @@ import {
   Phone,
   Mail,
   MapPin,
-  HelpCircle
+  HelpCircle,
+  ChevronRight,
+  ChevronLeft,
+  Check,
+  FileText
 } from 'lucide-react';
 import { Client, ClientType, CivilStatus, Gender, EducationLevel, HousingType, PersonalReference } from '../types/client';
 import { validateEcuadorId } from '../lib/ecuador-id';
@@ -40,7 +44,9 @@ export const ClientModal: React.FC<ClientModalProps> = ({
   isEmbedded = false
 }) => {
   const { showToast } = useNotification();
-  const [activeTab, setActiveTab] = useState<'general' | 'credito' | 'laboral' | 'conyuge' | 'referencias' | 'garante'>('general');
+  
+  // Wizard Step State: 'step1' | 'step2' | 'step3'
+  const [activeStep, setActiveStep] = useState<'step1' | 'step2' | 'step3'>('step1');
   const [loading, setLoading] = useState(false);
 
   // Form State
@@ -140,6 +146,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
       }
 
       setIdValidationConfirmed(true);
+      setActiveStep('step1');
     } else {
       // Reset form
       setIdCard('');
@@ -175,6 +182,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
       setSelectedGuarantorId('');
       setIdValidationConfirmed(false);
       setIdValidationWarning(null);
+      setActiveStep('step1');
     }
   }, [initialData, isOpen]);
 
@@ -218,51 +226,84 @@ export const ClientModal: React.FC<ClientModalProps> = ({
     setReferences(references.filter(r => r.id !== id));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    // 1. Validar cédula
+  // Step 1 Validation
+  const validateStep1 = (): boolean => {
     if (!idCard.trim()) {
       showToast('La cédula o RUC es obligatoria.', 'warning');
-      setActiveTab('general');
-      return;
+      setActiveStep('step1');
+      return false;
     }
-
     const checkId = validateEcuadorId(idCard);
     if (!checkId.isValid && !idValidationConfirmed) {
       setIdValidationWarning(checkId.errorMessage || 'Cédula no válida.');
       showToast(checkId.errorMessage || 'Por favor verifica la cédula ingresada.', 'warning');
-      setActiveTab('general');
-      return;
+      setActiveStep('step1');
+      return false;
     }
-
-    // 2. Validar campos obligatorios generales
     if (!lastName.trim() || !firstName.trim() || !phone.trim() || !address.trim() || !city.trim()) {
-      showToast('Por favor completa todos los campos principales obligatorios (Nombres, Apellidos, Teléfono, Dirección, Ciudad).', 'warning');
-      setActiveTab('general');
-      return;
+      showToast('Por favor completa los datos principales obligatorios (Nombres, Apellidos, Teléfono, Dirección, Ciudad).', 'warning');
+      setActiveStep('step1');
+      return false;
     }
+    return true;
+  };
 
-    // 3. Validar campos de crédito
+  // Step 2 Validation
+  const validateStep2 = (): boolean => {
     if (clientType === 'CREDITO') {
       if (!birthDate.trim()) {
-        showToast('Para clientes a Crédito (Buró Equifax), la fecha de nacimiento es obligatoria.', 'warning');
-        setActiveTab('credito');
-        return;
+        showToast('Para clientes a Crédito, la fecha de nacimiento es obligatoria.', 'warning');
+        setActiveStep('step2');
+        return false;
       }
       if (housingType === 'ARRENDADA' && !landlordName.trim()) {
         showToast('Para vivienda arrendada, el nombre del arrendatario es requerido.', 'warning');
-        setActiveTab('credito');
-        return;
+        setActiveStep('step2');
+        return false;
       }
       if (!workplace.trim() || !workPhone.trim()) {
         showToast('Para clientes a Crédito, la información laboral (Lugar de Trabajo y Teléfono Laboral) es requerida.', 'warning');
-        setActiveTab('laboral');
-        return;
+        setActiveStep('step2');
+        return false;
       }
+    }
+    return true;
+  };
+
+  // Next Step Action
+  const handleNextStep = () => {
+    if (activeStep === 'step1') {
+      if (validateStep1()) {
+        if (clientType === 'CONTADO') {
+          // If contado, direct advance or submit
+          setActiveStep('step2');
+        } else {
+          setActiveStep('step2');
+        }
+      }
+    } else if (activeStep === 'step2') {
+      if (validateStep2()) {
+        setActiveStep('step3');
+      }
+    }
+  };
+
+  // Prev Step Action
+  const handlePrevStep = () => {
+    if (activeStep === 'step3') setActiveStep('step2');
+    else if (activeStep === 'step2') setActiveStep('step1');
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!validateStep1()) return;
+
+    if (clientType === 'CREDITO') {
+      if (!validateStep2()) return;
       if (references.length < 2) {
-        showToast('Para clientes a Crédito, ingrese al menos 2 Referencias Personales en la pestaña "5. Referencias".', 'warning');
-        setActiveTab('referencias');
+        showToast('Para clientes a Crédito, ingrese al menos 2 Referencias Personales en el Paso 3.', 'warning');
+        setActiveStep('step3');
         return;
       }
     }
@@ -344,512 +385,519 @@ export const ClientModal: React.FC<ClientModalProps> = ({
   // Garantes disponibles (excluyendo el cliente actual)
   const availableGuarantors = existingClients.filter(c => c.id !== initialData?.id);
 
+  const stepNumber = activeStep === 'step1' ? 1 : activeStep === 'step2' ? 2 : 3;
+
   const content = (
-    <div className={isEmbedded ? "flex-1 flex flex-col min-h-0 overflow-hidden" : "relative w-full max-w-4xl bg-white dark:bg-neutral-900 rounded-2xl shadow-2xl border border-neutral-200 dark:border-neutral-800 overflow-hidden my-8"}>
+    <div className={isEmbedded ? "flex-1 flex flex-col min-h-0 overflow-hidden" : "relative w-[92vw] max-w-6xl h-[88vh] max-h-[920px] bg-white dark:bg-neutral-900 rounded-3xl shadow-2xl border border-neutral-200 dark:border-neutral-800 flex flex-col overflow-hidden my-auto"}>
       
-      {/* Header */}
+      {/* Top Header */}
       {!isEmbedded && (
-        <div className="px-6 py-4 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between bg-neutral-50/50 dark:bg-neutral-800/50">
+        <div className="px-6 py-4 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between bg-neutral-50/80 dark:bg-neutral-800/50 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-md shadow-indigo-500/20">
               <User className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-neutral-900 dark:text-white">
-                {initialData ? 'Editar Ficha de Cliente' : 'Registrar Nuevo Cliente'}
+              <h2 className="text-lg font-black text-neutral-900 dark:text-white flex items-center gap-2">
+                {initialData ? 'Editar Expediente de Cliente' : 'Registro de Nuevo Cliente'}
+                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                  clientType === 'CREDITO' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                }`}>
+                  {clientType}
+                </span>
               </h2>
-              <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                Padrón comercial y requisitos obligatorios para reporte Buró Equifax
+              <p className="text-xs text-neutral-500 dark:text-neutral-400 font-medium">
+                Padrón comercial, expediente crediticio y requisitos para reporte Buró Equifax
               </p>
             </div>
           </div>
           <button 
             type="button"
             onClick={onClose}
-            className="p-2 rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+            className="p-2 rounded-xl text-neutral-400 hover:text-neutral-700 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
       )}
 
-        {/* Cédula Error Override Modal / Prompt */}
-        {idValidationWarning && !idValidationConfirmed && (
-          <div className="m-6 p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl flex items-start gap-3.5">
-            <AlertTriangle className="w-6 h-6 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-            <div className="flex-1 text-sm">
-              <h4 className="font-semibold text-amber-900 dark:text-amber-200">
-                Alerta de Verificación de Identificación (Ecuador)
-              </h4>
-              <p className="text-amber-700 dark:text-amber-300 mt-1 leading-relaxed">
-                {idValidationWarning}
-              </p>
-              <div className="mt-3 flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIdValidationConfirmed(true)}
-                  className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors"
-                >
-                  Sí, deseo continuar con este número
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIdValidationWarning(null);
-                    setIdCard('');
-                  }}
-                  className="px-3.5 py-1.5 bg-white dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border border-neutral-300 dark:border-neutral-700 rounded-lg text-xs font-semibold hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
-                >
-                  Corregir Cédula
-                </button>
-              </div>
+      {/* ID Validation Banner */}
+      {idValidationWarning && !idValidationConfirmed && (
+        <div className="mx-6 mt-4 p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-2xl flex items-start gap-3.5 shrink-0">
+          <AlertTriangle className="w-6 h-6 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div className="flex-1 text-sm">
+            <h4 className="font-semibold text-amber-900 dark:text-amber-200">
+              Alerta de Verificación de Identificación (Ecuador)
+            </h4>
+            <p className="text-amber-700 dark:text-amber-300 mt-1 leading-relaxed">
+              {idValidationWarning}
+            </p>
+            <div className="mt-3 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setIdValidationConfirmed(true)}
+                className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-colors"
+              >
+                Sí, deseo continuar con este número
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIdValidationWarning(null);
+                  setIdCard('');
+                }}
+                className="px-3.5 py-1.5 bg-white dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 border border-neutral-300 dark:border-neutral-700 rounded-xl text-xs font-semibold hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors"
+              >
+                Corregir Cédula
+              </button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Tabs Navigation */}
-        <div className="flex border-b border-neutral-200 dark:border-neutral-800 px-6 bg-neutral-50/30 dark:bg-neutral-900/50 overflow-x-auto gap-2">
+      {/* FIXED TOP TABS / WIZARD STEPS HEADER */}
+      <div className="flex border-b border-neutral-200 dark:border-neutral-800 px-6 bg-neutral-50/50 dark:bg-neutral-900/50 overflow-x-auto gap-2 shrink-0">
+        <button
+          type="button"
+          onClick={() => setActiveStep('step1')}
+          className={`py-3.5 px-4 text-xs font-bold border-b-2 flex items-center gap-2 whitespace-nowrap transition-all ${
+            activeStep === 'step1'
+              ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 bg-indigo-50/30 dark:bg-indigo-950/20'
+              : 'border-transparent text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+          }`}
+        >
+          <div className={`w-5 h-5 rounded-full text-[11px] flex items-center justify-center font-black ${
+            activeStep === 'step1' ? 'bg-indigo-600 text-white' : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300'
+          }`}>
+            1
+          </div>
+          <User className="w-4 h-4" />
+          <span>Paso 1: Datos Principales</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            if (initialData || clientType === 'CONTADO' || validateStep1()) {
+              setActiveStep('step2');
+            }
+          }}
+          className={`py-3.5 px-4 text-xs font-bold border-b-2 flex items-center gap-2 whitespace-nowrap transition-all ${
+            activeStep === 'step2'
+              ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 bg-indigo-50/30 dark:bg-indigo-950/20'
+              : 'border-transparent text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
+          }`}
+        >
+          <div className={`w-5 h-5 rounded-full text-[11px] flex items-center justify-center font-black ${
+            activeStep === 'step2' ? 'bg-indigo-600 text-white' : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300'
+          }`}>
+            2
+          </div>
+          <CreditCard className="w-4 h-4" />
+          <span>Paso 2: Secundarios, Buró & Laboral</span>
+        </button>
+
+        {clientType === 'CREDITO' && (
           <button
             type="button"
-            onClick={() => setActiveTab('general')}
-            className={`py-3 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 whitespace-nowrap transition-colors ${
-              activeTab === 'general'
-                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+            onClick={() => {
+              if (initialData || (validateStep1() && validateStep2())) {
+                setActiveStep('step3');
+              }
+            }}
+            className={`py-3.5 px-4 text-xs font-bold border-b-2 flex items-center gap-2 whitespace-nowrap transition-all ${
+              activeStep === 'step3'
+                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400 bg-indigo-50/30 dark:bg-indigo-950/20'
                 : 'border-transparent text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
             }`}
           >
-            <User className="w-4 h-4" />
-            1. Datos Principales
+            <div className={`w-5 h-5 rounded-full text-[11px] flex items-center justify-center font-black ${
+              activeStep === 'step3' ? 'bg-indigo-600 text-white' : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-300'
+            }`}>
+              3
+            </div>
+            <Users className="w-4 h-4" />
+            <span>Paso 3: Referencias & Garante</span>
           </button>
+        )}
+      </div>
 
-          {clientType === 'CREDITO' && (
-            <>
-              <button
-                type="button"
-                onClick={() => setActiveTab('credito')}
-                className={`py-3 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 whitespace-nowrap transition-colors ${
-                  activeTab === 'credito'
-                    ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                    : 'border-transparent text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
-                }`}
-              >
-                <CreditCard className="w-4 h-4" />
-                2. Buró / Vivienda
-              </button>
+      {/* FORM CONTENT BODY WITH SCROLL */}
+      <form onSubmit={handleSubmit} className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 p-6 sm:p-8 overflow-y-auto space-y-6">
 
-              <button
-                type="button"
-                onClick={() => setActiveTab('laboral')}
-                className={`py-3 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 whitespace-nowrap transition-colors ${
-                  activeTab === 'laboral'
-                    ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                    : 'border-transparent text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
-                }`}
-              >
-                <Briefcase className="w-4 h-4" />
-                3. Info Laboral
-              </button>
-
-              {(civilStatus === 'CASADO' || civilStatus === 'UNION_LIBRE') && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('conyuge')}
-                  className={`py-3 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 whitespace-nowrap transition-colors ${
-                    activeTab === 'conyuge'
-                      ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                      : 'border-transparent text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
-                  }`}
-                >
-                  <Heart className="w-4 h-4" />
-                  4. Cónyuge
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('referencias')}
-                className={`py-3 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 whitespace-nowrap transition-colors ${
-                  activeTab === 'referencias'
-                    ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                    : 'border-transparent text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
-                }`}
-              >
-                <Users className="w-4 h-4" />
-                5. Referencias ({references.length})
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('garante')}
-                className={`py-3 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 whitespace-nowrap transition-colors ${
-                  activeTab === 'garante'
-                    ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                    : 'border-transparent text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-white'
-                }`}
-              >
-                <ShieldCheck className="w-4 h-4" />
-                6. Garante Solidario
-              </button>
-            </>
-          )}
-        </div>
-
-        {/* Form Body */}
-        <form onSubmit={handleSubmit}>
-          <div className="p-6 max-h-[68vh] overflow-y-auto space-y-6">
-
-            {/* TAB 1: GENERAL */}
-            {activeTab === 'general' && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Tipo de Cliente */}
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1">
-                      Tipo de Cliente *
-                    </label>
-                    <select
-                      value={clientType}
-                      onChange={(e) => setClientType(e.target.value as ClientType)}
-                      className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm font-semibold text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                    >
-                      <option value="CREDITO">CRÉDITO (Exige Datos Buró)</option>
-                      <option value="CONTADO">CONTADO (Venta Directa)</option>
-                    </select>
-                  </div>
-
-                  {/* Cédula o RUC */}
-                  <div className="md:col-span-2">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1 flex items-center justify-between">
-                      <span>Cédula o RUC *</span>
-                      <span className="text-[10px] text-neutral-400 font-normal">Algoritmo Módulo 10 EC</span>
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        maxLength={13}
-                        value={idCard}
-                        onChange={(e) => setIdCard(e.target.value.replace(/\D/g, ''))}
-                        onBlur={handleIdCardBlur}
-                        placeholder="Ej: 0102030405 o 0102030405001"
-                        className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm font-semibold text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                        required
-                      />
-                      {idCard.length >= 10 && (
-                        <div className="absolute right-3 top-2.5">
-                          {validateEcuadorId(idCard).isValid ? (
-                            <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                          ) : (
-                            <AlertTriangle className="w-5 h-5 text-amber-500" />
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1">
-                      Apellidos o Razón Social *
-                    </label>
-                    <input
-                      type="text"
-                      value={lastName}
-                      onChange={(e) => setLastName(e.target.value)}
-                      placeholder="Ej: Pérez Guartambel o Corporación ABC"
-                      className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1">
-                      Nombres *
-                    </label>
-                    <input
-                      type="text"
-                      value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
-                      placeholder="Ej: Juan Carlos"
-                      className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1">
-                      Teléfono / Celular *
-                    </label>
-                    <input
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="Ej: 0991234567"
-                      className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1">
-                      Ciudad o Sector *
-                    </label>
-                    <input
-                      type="text"
-                      value={city}
-                      onChange={(e) => setCity(e.target.value)}
-                      placeholder="Ej: Cuenca / El Sagrario"
-                      className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1">
-                      Correo Electrónico (Opcional)
-                    </label>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="cliente@ejemplo.com"
-                      className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-                </div>
-
+          {/* PASO 1: DATOS PRINCIPALES */}
+          {activeStep === 'step1' && (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              <div className="pb-2 flex items-center justify-between">
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1">
-                    Dirección Domiciliaria Exacta *
+                  <h3 className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest flex items-center gap-2">
+                    <User className="w-4 h-4" />
+                    Información Principal de Identificación y Contacto
+                  </h3>
+                  <p className="text-[11px] text-neutral-500 mt-0.5">Ingrese la cédula o RUC e información domiciliaria primaria.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                {/* Tipo de Cliente */}
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1.5">
+                    Tipo de Cliente *
+                  </label>
+                  <select
+                    value={clientType}
+                    onChange={(e) => setClientType(e.target.value as ClientType)}
+                    className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-bold text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                  >
+                    <option value="CREDITO">CRÉDITO (Requiere Expediente Buró)</option>
+                    <option value="CONTADO">CONTADO (Venta Directa de Almacén)</option>
+                  </select>
+                </div>
+
+                {/* Cédula o RUC */}
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1.5 flex items-center justify-between">
+                    <span>Cédula de Identidad o RUC *</span>
+                    <span className="text-[10px] text-neutral-400 font-normal">Validación oficial Módulo 10 Ecuador</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      maxLength={13}
+                      value={idCard}
+                      onChange={(e) => setIdCard(e.target.value.replace(/\D/g, ''))}
+                      onBlur={handleIdCardBlur}
+                      placeholder="Ej: 0102030405 o 0102030405001"
+                      className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-mono font-bold text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                      required
+                    />
+                    {idCard.length >= 10 && (
+                      <div className="absolute right-3 top-3">
+                        {validateEcuadorId(idCard).isValid ? (
+                          <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                        ) : (
+                          <AlertTriangle className="w-5 h-5 text-amber-500" />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1.5">
+                    Apellidos o Razón Social *
                   </label>
                   <input
                     type="text"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    placeholder="Calle principal, secundaria y número de casa"
-                    className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    placeholder="Ej: Pérez Guartambel o Corporación ABC"
+                    className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
                     required
                   />
                 </div>
 
-                {/* Cupo para Crédito */}
-                <div className="p-4 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-800/40 rounded-xl">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs font-bold uppercase tracking-wider text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
-                      <CreditCard className="w-4 h-4 text-indigo-600" />
-                      Cupo para Crédito Asignado ($) *
-                    </label>
-                    <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">
-                      {formatCurrency(creditLimit)}
-                    </span>
-                  </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1.5">
+                    Nombres *
+                  </label>
                   <input
-                    type="number"
-                    min="0"
-                    step="50"
-                    value={creditLimit}
-                    onChange={(e) => setCreditLimit(parseFloat(e.target.value) || 0)}
-                    className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm font-bold text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                    type="text"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    placeholder="Ej: Juan Carlos"
+                    className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
                     required
                   />
-                  <p className="text-[11px] text-neutral-500 dark:text-neutral-400 mt-1.5">
-                    Límite máximo de financiamiento directo para este cliente. El semáforo de ventas validará las compras contra este cupo.
-                  </p>
                 </div>
               </div>
-            )}
 
-            {/* TAB 2: DATOS SECUNDARIOS CREDITO / EQUIFAX */}
-            {activeTab === 'credito' && (
-              <div className="space-y-4">
-                <div className="p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/50 rounded-xl text-xs text-blue-800 dark:text-blue-300 flex items-center gap-2">
-                  <HelpCircle className="w-4 h-4 shrink-0" />
-                  <span>Estos campos son obligatorios para clientes de crédito conforme a los requerimientos de evaluación y reporte de Buró Equifax.</span>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1.5">
+                    Teléfono / Celular *
+                  </label>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="Ej: 0991234567"
+                    className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-mono font-bold text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                    required
+                  />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Estado Civil */}
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1.5">
+                    Ciudad o Sector *
+                  </label>
+                  <input
+                    type="text"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    placeholder="Ej: Cuenca, Gualaceo..."
+                    className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1.5">
+                    Correo Electrónico
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="ejemplo@correo.com"
+                    className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1.5">
+                  Dirección Domiciliaria Exacta *
+                </label>
+                <input
+                  type="text"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  placeholder="Ej: Av. Remigio Crespo y Sangurima N° 12-34 (Frente a la Farmacia)"
+                  className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                  required
+                />
+              </div>
+            </div>
+          )}
+
+          {/* PASO 2: DATOS SECUNDARIOS, BURÓ/VIVIENDA & TRABAJO */}
+          {activeStep === 'step2' && (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              
+              {/* Sección 1: Datos Personales Secundarios */}
+              <div className="space-y-4">
+                <div className="pb-1">
+                  <h3 className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest flex items-center gap-2">
+                    <CreditCard className="w-4 h-4" />
+                    1. Estado Civil, Nacimiento y Vivienda (Buró Equifax)
+                  </h3>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1">
-                      Estado Civil *
+                      Estado Civil
                     </label>
                     <select
                       value={civilStatus}
                       onChange={(e) => setCivilStatus(e.target.value as CivilStatus)}
-                      className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm font-medium text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-bold text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
                     >
-                      <option value="SOLTERO">Soltero/a</option>
-                      <option value="CASADO">Casado/a</option>
+                      <option value="SOLTERO">Soltero(a)</option>
+                      <option value="CASADO">Casado(a)</option>
                       <option value="UNION_LIBRE">Unión Libre</option>
-                      <option value="DIVORCIADO">Divorciado/a</option>
-                      <option value="VIUDO">Viudo/a</option>
+                      <option value="DIVORCIADO">Divorciado(a)</option>
+                      <option value="VIUDO">Viudo(a)</option>
                     </select>
                   </div>
 
-                  {/* Género */}
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1">
-                      Género *
+                      Género
                     </label>
                     <select
                       value={gender}
                       onChange={(e) => setGender(e.target.value as Gender)}
-                      className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm font-medium text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-bold text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
                     >
                       <option value="MASCULINO">Masculino</option>
                       <option value="FEMENINO">Femenino</option>
-                      <option value="OTRO">Otro</option>
+                      <option value="OTRO">Otro / Jurídico</option>
                     </select>
                   </div>
 
-                  {/* Cargas familiares */}
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1">
-                      Cargas (Hijos menores de edad) *
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="15"
-                      value={dependentsCount}
-                      onChange={(e) => setDependentsCount(parseInt(e.target.value) || 0)}
-                      className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm font-medium text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Fecha de Nacimiento */}
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1">
-                      Fecha de Nacimiento * (Buró Equifax)
+                      Fecha Nacimiento {clientType === 'CREDITO' && '*'}
                     </label>
                     <input
                       type="date"
                       value={birthDate}
                       onChange={(e) => setBirthDate(e.target.value)}
-                      className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                      required={clientType === 'CREDITO'}
+                      className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-bold text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
 
-                  {/* Lugar de Nacimiento */}
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1">
-                      Lugar de Nacimiento
+                      Cargas Familiares
                     </label>
                     <input
-                      type="text"
-                      value={birthPlace}
-                      onChange={(e) => setBirthPlace(e.target.value)}
-                      placeholder="Ej: Cuenca, Azuay"
-                      className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                      type="number"
+                      min={0}
+                      value={dependentsCount}
+                      onChange={(e) => setDependentsCount(Number(e.target.value))}
+                      className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-bold text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Nivel de Educación */}
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1">
-                      Nivel de Educación *
-                    </label>
-                    <select
-                      value={educationLevel}
-                      onChange={(e) => setEducationLevel(e.target.value as EducationLevel)}
-                      className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm font-medium text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                    >
-                      <option value="PRIMARIA">Primaria</option>
-                      <option value="SECUNDARIA">Secundaria / Bachillerato</option>
-                      <option value="TECNICO">Técnico / Tecnólogo</option>
-                      <option value="UNIVERSITARIO">Universitario</option>
-                      <option value="POSTGRADO">Postgrado / Maestría</option>
-                      <option value="NINGUNO">Sin instrucción formal</option>
-                    </select>
-                  </div>
-
-                  {/* Tipo de Vivienda */}
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1">
-                      Tipo de Vivienda *
+                      Tipo de Vivienda
                     </label>
                     <select
                       value={housingType}
                       onChange={(e) => setHousingType(e.target.value as HousingType)}
-                      className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm font-medium text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-bold text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
                     >
                       <option value="PROPIA">Propia</option>
-                      <option value="ARRENDADA">Arrendada / Alquilada</option>
-                      <option value="FAMILIAR">Familiar / Prestada</option>
+                      <option value="ARRENDADA">Arrendada</option>
+                      <option value="FAMILIAR">Familiar</option>
                       <option value="HIPOTECADA">Hipotecada</option>
-                      <option value="OTRO">Otro</option>
                     </select>
                   </div>
 
-                  {/* Tiempo de residencia */}
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1">
-                      Tiempo de Residencia *
+                      Tiempo de Residencia
                     </label>
                     <input
                       type="text"
                       value={residenceTime}
                       onChange={(e) => setResidenceTime(e.target.value)}
-                      placeholder="Ej: 5 años / 8 meses"
-                      className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                      placeholder="Ej: 5 años"
+                      className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1">
+                      Nivel de Educación
+                    </label>
+                    <select
+                      value={educationLevel}
+                      onChange={(e) => setEducationLevel(e.target.value as EducationLevel)}
+                      className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-bold text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="PRIMARIA">Primaria</option>
+                      <option value="SECUNDARIA">Secundaria</option>
+                      <option value="TERCIARIA_TECNICA">Técnica / Tecnológica</option>
+                      <option value="UNIVERSITARIA">Universitaria</option>
+                      <option value="POSTGRADO">Postgrado</option>
+                    </select>
                   </div>
                 </div>
 
-                {/* Si la vivienda es arrendada */}
                 {housingType === 'ARRENDADA' && (
-                  <div className="p-4 bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 rounded-xl grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-3 bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/50 rounded-xl grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-amber-900 dark:text-amber-200 mb-1">
-                        Nombre del Arrendatario (Dueño) *
+                      <label className="block text-[11px] font-bold text-amber-900 dark:text-amber-200 mb-1">
+                        Nombre del Arrendatario / Dueño *
                       </label>
                       <input
                         type="text"
                         value={landlordName}
                         onChange={(e) => setLandlordName(e.target.value)}
-                        placeholder="Nombre completo del arrendador"
-                        className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm text-neutral-900 dark:text-white focus:ring-2 focus:ring-amber-500"
-                        required={housingType === 'ARRENDADA'}
+                        placeholder="Ej: Sra. María Gómez"
+                        className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-neutral-900 dark:text-white outline-none"
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-amber-900 dark:text-amber-200 mb-1">
+                      <label className="block text-[11px] font-bold text-amber-900 dark:text-amber-200 mb-1">
                         Teléfono del Arrendatario
                       </label>
                       <input
                         type="tel"
                         value={landlordPhone}
                         onChange={(e) => setLandlordPhone(e.target.value)}
-                        placeholder="Teléfono de contacto"
-                        className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm text-neutral-900 dark:text-white focus:ring-2 focus:ring-amber-500"
+                        placeholder="Ej: 0991112233"
+                        className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-neutral-900 dark:text-white outline-none"
                       />
                     </div>
                   </div>
                 )}
               </div>
-            )}
 
-            {/* TAB 3: INFORMACION LABORAL */}
-            {activeTab === 'laboral' && (
-              <div className="space-y-4">
+              {/* Cónyuge (si aplica) */}
+              {(civilStatus === 'CASADO' || civilStatus === 'UNION_LIBRE') && (
+                <div className="p-4 bg-indigo-50/40 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 rounded-2xl space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Heart className="w-4 h-4 text-indigo-600" />
+                    <h4 className="text-xs font-black uppercase text-indigo-900 dark:text-indigo-200 tracking-wider">
+                      Datos del Cónyuge / Conviviente
+                    </h4>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-neutral-500 mb-1">Apellidos Cónyuge</label>
+                      <input
+                        type="text"
+                        value={spouseLastName}
+                        onChange={(e) => setSpouseLastName(e.target.value)}
+                        placeholder="Apellidos"
+                        className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-medium text-neutral-900 dark:text-white outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-neutral-500 mb-1">Nombres Cónyuge</label>
+                      <input
+                        type="text"
+                        value={spouseFirstName}
+                        onChange={(e) => setSpouseFirstName(e.target.value)}
+                        placeholder="Nombres"
+                        className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-medium text-neutral-900 dark:text-white outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-neutral-500 mb-1">Cédula Cónyuge</label>
+                      <input
+                        type="text"
+                        value={spouseIdCard}
+                        onChange={(e) => setSpouseIdCard(e.target.value)}
+                        placeholder="Cédula"
+                        className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-mono text-neutral-900 dark:text-white outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-neutral-500 mb-1">Teléfono Cónyuge</label>
+                      <input
+                        type="tel"
+                        value={spousePhone}
+                        onChange={(e) => setSpousePhone(e.target.value)}
+                        placeholder="Teléfono"
+                        className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-mono text-neutral-900 dark:text-white outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Sección 2: Información Laboral / Económica */}
+              <div className="space-y-4 pt-2">
+                <div className="pb-1">
+                  <h3 className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest flex items-center gap-2">
+                    <Briefcase className="w-4 h-4" />
+                    2. Información Laboral / Económica
+                  </h3>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1">
-                      Lugar de Trabajo / Empresa
+                      Lugar de Trabajo / Empresa {clientType === 'CREDITO' && '*'}
                     </label>
                     <input
                       type="text"
                       value={workplace}
                       onChange={(e) => setWorkplace(e.target.value)}
-                      placeholder="Empresa, institución o negocio"
-                      className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                      placeholder="Ej: Ministerio de Salud / Negocio Propio"
+                      className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
 
@@ -861,14 +909,27 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                       type="text"
                       value={position}
                       onChange={(e) => setPosition(e.target.value)}
-                      placeholder="Ej: Supervisor, Comerciante, Docente"
-                      className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                      placeholder="Ej: Contador / Comerciante"
+                      className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1">
+                      Teléfono Laboral {clientType === 'CREDITO' && '*'}
+                    </label>
+                    <input
+                      type="tel"
+                      value={workPhone}
+                      onChange={(e) => setWorkPhone(e.target.value)}
+                      placeholder="Ej: 072834567"
+                      className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-mono font-bold text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
                     <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1">
                       Dirección del Trabajo
                     </label>
@@ -876,135 +937,95 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                       type="text"
                       value={workAddress}
                       onChange={(e) => setWorkAddress(e.target.value)}
-                      placeholder="Dirección laboral / referencias"
-                      className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                      placeholder="Ej: Calle Larga y Benigno Malo"
+                      className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
+                </div>
 
+                <div className="p-4 bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-800/50 rounded-2xl flex items-center justify-between">
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1">
-                      Teléfono del Trabajo / Ext.
-                    </label>
+                    <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200 block uppercase tracking-wider">
+                      Límite de Crédito Aprobado ($)
+                    </span>
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400">
+                      Monto máximo financiable para este cliente
+                    </span>
+                  </div>
+                  <div className="relative w-40">
+                    <span className="absolute left-3 top-2.5 font-black text-emerald-700">$</span>
                     <input
-                      type="tel"
-                      value={workPhone}
-                      onChange={(e) => setWorkPhone(e.target.value)}
-                      placeholder="Ej: 072834567 ext 102"
-                      className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                      type="number"
+                      min={0}
+                      step={50}
+                      value={creditLimit}
+                      onChange={(e) => setCreditLimit(Number(e.target.value))}
+                      className="w-full pl-7 pr-3 py-1.5 bg-neutral-50 dark:bg-neutral-800 border border-emerald-300 dark:border-emerald-700 rounded-xl text-sm font-black text-emerald-700 dark:text-emerald-300 outline-none"
                     />
                   </div>
                 </div>
               </div>
-            )}
 
-            {/* TAB 4: CONYUGE */}
-            {activeTab === 'conyuge' && (
+            </div>
+          )}
+
+          {/* PASO 3: REFERENCIAS & GARANTE SOLIDARIO */}
+          {activeStep === 'step3' && (
+            <div className="space-y-6 animate-in fade-in duration-200">
+              
+              {/* Referencias Personales */}
               <div className="space-y-4">
-                <div className="p-3 bg-neutral-100 dark:bg-neutral-800/60 rounded-xl text-xs text-neutral-600 dark:text-neutral-400">
-                  Aplica para clientes en estado civil Casado(a) o Unión Libre.
+                <div className="pb-1 flex items-center justify-between">
+                  <h3 className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest flex items-center gap-2">
+                    <Users className="w-4 h-4" />
+                    1. Referencias Personales o Familiares (Mínimo 2 requeridas)
+                  </h3>
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
+                    Registradas: {references.length}
+                  </span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1">
-                      Apellidos del Cónyuge
-                    </label>
-                    <input
-                      type="text"
-                      value={spouseLastName}
-                      onChange={(e) => setSpouseLastName(e.target.value)}
-                      placeholder="Apellidos"
-                      className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1">
-                      Nombres del Cónyuge
-                    </label>
-                    <input
-                      type="text"
-                      value={spouseFirstName}
-                      onChange={(e) => setSpouseFirstName(e.target.value)}
-                      placeholder="Nombres"
-                      className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1">
-                      Cédula del Cónyuge
-                    </label>
-                    <input
-                      type="text"
-                      maxLength={10}
-                      value={spouseIdCard}
-                      onChange={(e) => setSpouseIdCard(e.target.value.replace(/\D/g, ''))}
-                      placeholder="10 dígitos"
-                      className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 dark:text-neutral-300 mb-1">
-                      Teléfono del Cónyuge
-                    </label>
-                    <input
-                      type="tel"
-                      value={spousePhone}
-                      onChange={(e) => setSpousePhone(e.target.value)}
-                      placeholder="Celular de contacto"
-                      className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* TAB 5: REFERENCIAS PERSONALES */}
-            {activeTab === 'referencias' && (
-              <div className="space-y-4">
-                <div className="p-4 bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200 dark:border-neutral-700 rounded-xl space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-800 dark:text-neutral-200">
-                    Añadir Referencia Personal / Familiar
-                  </h4>
+                {/* Formulario rápido para añadir referencia */}
+                <div className="p-4 bg-neutral-50/50 dark:bg-neutral-800/40 border border-neutral-200 dark:border-neutral-700 rounded-2xl space-y-3">
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                     <div>
+                      <label className="block text-[10px] font-bold uppercase text-neutral-500 mb-1">Nombres y Apellidos *</label>
                       <input
                         type="text"
                         value={newRefName}
                         onChange={(e) => setNewRefName(e.target.value)}
-                        placeholder="Apellido y Nombre *"
-                        className="w-full px-3 py-1.5 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-lg text-xs"
+                        placeholder="Ej: Carlos Andrade"
+                        className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white font-semibold outline-none"
                       />
                     </div>
                     <div>
+                      <label className="block text-[10px] font-bold uppercase text-neutral-500 mb-1">Parentesco / Relación</label>
                       <input
                         type="text"
                         value={newRefRelation}
                         onChange={(e) => setNewRefRelation(e.target.value)}
-                        placeholder="Parentesco (Ej: Hermano, Amigo)"
-                        className="w-full px-3 py-1.5 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-lg text-xs"
+                        placeholder="Ej: Hermano / Amigo"
+                        className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white font-semibold outline-none"
                       />
                     </div>
                     <div>
+                      <label className="block text-[10px] font-bold uppercase text-neutral-500 mb-1">Teléfono *</label>
                       <input
                         type="tel"
                         value={newRefPhone}
                         onChange={(e) => setNewRefPhone(e.target.value)}
-                        placeholder="Teléfono *"
-                        className="w-full px-3 py-1.5 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-lg text-xs"
+                        placeholder="Ej: 0987654321"
+                        className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white font-mono font-bold outline-none"
                       />
                     </div>
                     <div>
+                      <label className="block text-[10px] font-bold uppercase text-neutral-500 mb-1">Ciudad</label>
                       <input
                         type="text"
                         value={newRefCity}
                         onChange={(e) => setNewRefCity(e.target.value)}
-                        placeholder="Ciudad"
-                        className="w-full px-3 py-1.5 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-lg text-xs"
+                        placeholder="Ej: Cuenca"
+                        className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white font-semibold outline-none"
                       />
                     </div>
                   </div>
@@ -1012,98 +1033,87 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                     <button
                       type="button"
                       onClick={handleAddReference}
-                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm transition-colors"
+                      className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      Agregar Referencia
+                      Añadir Referencia
                     </button>
                   </div>
                 </div>
 
-                {/* List of references */}
-                {references.length === 0 ? (
-                  <div className="text-center py-6 text-neutral-400 text-xs italic">
-                    No has agregado referencias aún. Se recomienda al menos 2 referencias para Buró Equifax.
-                  </div>
-                ) : (
-                  <div className="divide-y divide-neutral-200 dark:divide-neutral-800 border border-neutral-200 dark:border-neutral-800 rounded-xl overflow-hidden">
-                    {references.map((ref, idx) => (
-                      <div key={ref.id || idx} className="p-3 bg-white dark:bg-neutral-800/70 flex items-center justify-between">
+                {/* Lista de referencias ingresadas */}
+                <div className="space-y-2">
+                  {references.length > 0 ? (
+                    references.map((r) => (
+                      <div key={r.id} className="p-3 bg-neutral-50 dark:bg-neutral-800/80 border border-neutral-200 dark:border-neutral-700 rounded-xl flex items-center justify-between text-xs">
                         <div>
-                          <div className="text-xs font-bold text-neutral-900 dark:text-white">
-                            {ref.fullName} <span className="text-neutral-500 font-normal">({ref.relationship})</span>
-                          </div>
-                          <div className="text-[11px] text-neutral-500 flex items-center gap-3 mt-0.5">
-                            <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> {ref.phone}</span>
-                            <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {ref.city}</span>
-                          </div>
+                          <p className="font-bold text-neutral-900 dark:text-white">{r.fullName} <span className="font-normal text-neutral-500">({r.relationship})</span></p>
+                          <p className="text-neutral-500 font-mono">Telf: {r.phone} • {r.city}</p>
                         </div>
                         <button
                           type="button"
-                          onClick={() => handleRemoveReference(ref.id)}
-                          className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors"
+                          onClick={() => handleRemoveReference(r.id)}
+                          className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    ))
+                  ) : (
+                    <div className="p-4 text-center text-xs text-neutral-400 italic bg-neutral-50/50 dark:bg-neutral-800/30 rounded-xl border border-dashed border-neutral-200 dark:border-neutral-700">
+                      No hay referencias registradas aún. Añada al menos 2 referencias usando los campos de arriba.
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
 
-            {/* TAB 6: GARANTE SOLIDARIO */}
-            {activeTab === 'garante' && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 p-4 bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200 dark:border-neutral-700 rounded-xl">
-                  <input
-                    type="checkbox"
-                    id="chkGuarantor"
-                    checked={hasGuarantor}
-                    onChange={(e) => setHasGuarantor(e.target.checked)}
-                    className="w-4 h-4 text-indigo-600 rounded border-neutral-300 focus:ring-indigo-500"
-                  />
-                  <label htmlFor="chkGuarantor" className="text-xs font-bold text-neutral-900 dark:text-white cursor-pointer select-none">
-                    Vincular un Garante Solidario para este Cliente
+              {/* Garante Solidario */}
+              <div className="space-y-4 pt-2">
+                <div className="pb-1 flex items-center justify-between">
+                  <h3 className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4" />
+                    2. Garante Solidario (Si aplica)
+                  </h3>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={hasGuarantor}
+                      onChange={(e) => setHasGuarantor(e.target.checked)}
+                      className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                    />
+                    <span className="text-xs font-bold text-neutral-700 dark:text-neutral-300">¿Requiere Garante Solidario?</span>
                   </label>
                 </div>
 
                 {hasGuarantor && (
-                  <div className="space-y-3 p-4 bg-indigo-50/40 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-800/50 rounded-xl">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-indigo-950 dark:text-indigo-200 mb-1">
-                      Seleccionar Garante de la Lista de Clientes Registrados *
+                  <div className="p-4 bg-amber-50/40 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/50 rounded-2xl space-y-3">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-amber-900 dark:text-amber-200">
+                      Seleccionar Cliente Registrado como Garante
                     </label>
                     <select
                       value={selectedGuarantorId}
                       onChange={(e) => setSelectedGuarantorId(e.target.value)}
-                      className="w-full px-3 py-2 bg-white dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-xl text-sm font-semibold text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-bold text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
                     >
-                      <option value="">-- Selecciona un Cliente Garante --</option>
-                      {availableGuarantors.map((cl) => (
-                        <option key={cl.id} value={cl.id}>
-                          {cl.lastName} {cl.firstName} (CI: {cl.idCard}) - Cupo: {formatCurrency(cl.creditLimit)}
+                      <option value="">-- Seleccionar Garante de la Lista de Clientes --</option>
+                      {availableGuarantors.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.lastName} {g.firstName} (CI: {g.idCard})
                         </option>
                       ))}
                     </select>
 
                     {selectedGuarantorId && (
                       (() => {
-                        const g = availableGuarantors.find(c => c.id === selectedGuarantorId);
+                        const g = existingClients.find(c => c.id === selectedGuarantorId);
                         if (!g) return null;
                         return (
-                          <div className="mt-3 p-3 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 text-xs space-y-1">
+                          <div className="p-3 bg-neutral-50 dark:bg-neutral-800 rounded-xl text-xs space-y-1 text-neutral-700 dark:text-neutral-300 border border-neutral-200 dark:border-neutral-700">
                             <p className="font-bold text-neutral-900 dark:text-white">
-                              Datos del Garante Vinculado:
+                              {g.lastName} {g.firstName}
                             </p>
-                            <p className="text-neutral-600 dark:text-neutral-300">
-                              Nombre: <span className="font-medium">{g.lastName} {g.firstName}</span>
-                            </p>
-                            <p className="text-neutral-600 dark:text-neutral-300">
-                              Cédula: <span className="font-medium">{g.idCard}</span> | Teléfono: <span className="font-medium">{g.phone}</span>
-                            </p>
-                            <p className="text-neutral-600 dark:text-neutral-300">
-                              Dirección: <span className="font-medium">{g.address}, {g.city}</span>
-                            </p>
+                            <p>Cédula: <span className="font-mono font-bold">{g.idCard}</span> • Teléfono: <span className="font-mono font-bold">{g.phone}</span></p>
+                            <p>Dirección: <span className="font-bold">{g.address}, {g.city}</span></p>
                           </div>
                         );
                       })()
@@ -1111,33 +1121,73 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                   </div>
                 )}
               </div>
-            )}
 
+            </div>
+          )}
+
+        </div>
+
+        {/* FIXED STICKY FOOTER WITH NAVIGATION BUTTONS */}
+        <div className="px-6 py-4 border-t border-neutral-200 dark:border-neutral-800 flex items-center justify-between bg-white dark:bg-neutral-900 shrink-0 z-20">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-black uppercase tracking-wider text-neutral-400">
+              Paso {stepNumber} de {clientType === 'CREDITO' ? 3 : 2}
+            </span>
+            <div className="flex gap-1">
+              <div className={`w-2.5 h-2.5 rounded-full ${stepNumber >= 1 ? 'bg-indigo-600' : 'bg-neutral-200 dark:bg-neutral-700'}`} />
+              <div className={`w-2.5 h-2.5 rounded-full ${stepNumber >= 2 ? 'bg-indigo-600' : 'bg-neutral-200 dark:bg-neutral-700'}`} />
+              {clientType === 'CREDITO' && (
+                <div className={`w-2.5 h-2.5 rounded-full ${stepNumber >= 3 ? 'bg-indigo-600' : 'bg-neutral-200 dark:bg-neutral-700'}`} />
+              )}
+            </div>
           </div>
 
-          {/* Footer */}
-          <div className="px-6 py-4 border-t border-neutral-200 dark:border-neutral-800 flex items-center justify-between bg-neutral-50/50 dark:bg-neutral-800/50">
-            <div className="text-xs text-neutral-500">
-              * Campos indispensables para operaciones de crédito y Buró
-            </div>
-            <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-bold text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-xl transition-all"
+            >
+              Cancelar
+            </button>
+
+            {activeStep !== 'step1' && (
               <button
                 type="button"
-                onClick={onClose}
-                className="px-4 py-2 text-sm font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-xl transition-colors"
+                onClick={handlePrevStep}
+                className="px-4 py-2 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
               >
-                Cancelar
+                <ChevronLeft className="w-4 h-4" />
+                Anterior
               </button>
+            )}
+
+            {/* Siguiente Button */}
+            {((activeStep === 'step1' && clientType === 'CREDITO') || (activeStep === 'step2' && clientType === 'CREDITO')) && !initialData && (
+              <button
+                type="button"
+                onClick={handleNextStep}
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-indigo-600/20"
+              >
+                <span>Siguiente Paso</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            )}
+
+            {/* Final Submit Button */}
+            {(activeStep === 'step3' || clientType === 'CONTADO' || initialData || (activeStep === 'step2' && clientType === 'CREDITO')) && (
               <button
                 type="submit"
                 disabled={loading}
-                className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-sm font-bold shadow-md shadow-indigo-600/20 transition-all flex items-center gap-2"
+                className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-2"
               >
-                {loading ? 'Guardando...' : initialData ? 'Guardar Cambios' : 'Registrar Cliente'}
+                <Check className="w-4 h-4" />
+                <span>{loading ? 'Guardando...' : initialData ? 'Guardar Cambios' : 'Registrar Cliente'}</span>
               </button>
-            </div>
+            )}
           </div>
-        </form>
+        </div>
+      </form>
 
     </div>
   );
@@ -1145,7 +1195,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
   if (isEmbedded) return content;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+    <div className="fixed inset-0 z-[180] flex items-center justify-center p-4 sm:p-6 bg-black/70 backdrop-blur-md overflow-hidden">
       {content}
     </div>
   );

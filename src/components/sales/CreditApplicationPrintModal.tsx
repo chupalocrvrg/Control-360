@@ -144,10 +144,10 @@ export const CreditApplicationPrintModal: React.FC<CreditApplicationPrintModalPr
   const appNumber = data.applicationNumber || `SOL-${format(new Date(), 'yyyyMMdd')}-${Math.floor(100 + Math.random() * 900)}`;
 
   return (
-    <div className="fixed inset-0 z-[130] flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto print:p-0 print:bg-white print:static">
+    <div className="fixed inset-0 z-[190] flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-md overflow-y-auto print:p-0 print:bg-white print:static">
       
       {/* Action Bar (Hidden on print) */}
-      <div className="fixed top-4 right-4 z-[140] flex items-center gap-3 print:hidden">
+      <div className="fixed top-4 right-4 z-[200] flex items-center gap-3 print:hidden">
         <button
           type="button"
           disabled={isExportingPdf}

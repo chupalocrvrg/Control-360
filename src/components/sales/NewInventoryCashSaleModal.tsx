@@ -269,7 +269,11 @@ export function NewInventoryCashSaleModal({
       await runTransaction(db, async (transaction) => {
         const invId = invRecord ? invRecord.id : `${selectedWarehouseId}_${selectedArticleId}`;
         const invRef = doc(db, 'warehouse_inventory', invId);
+        const artRef = doc(db, 'articles', selectedArticleId);
+
+        // --- 1. ALL READS FIRST (Firestore constraint) ---
         const invDoc = await transaction.get(invRef);
+        const artDoc = await transaction.get(artRef);
 
         const actualStock = invDoc.exists()
           ? ((invDoc.data().stock ?? invDoc.data().quantity) || 0)
@@ -279,7 +283,8 @@ export function NewInventoryCashSaleModal({
           throw new Error(`Stock insuficiente en bodega. Disponible: ${actualStock}, Solicitado: ${quantity}`);
         }
 
-        // 1. Descontar stock y remover series vendidas de warehouse_inventory
+        // --- 2. ALL WRITES AFTER READS ---
+        // 2a. Descontar stock y remover series vendidas de warehouse_inventory
         const invSeriesList: string[] = (invDoc.exists() && Array.isArray(invDoc.data().seriesList))
           ? invDoc.data().seriesList
           : (Array.isArray(selectedArticle?.seriesList) ? selectedArticle!.seriesList : []);
@@ -297,9 +302,7 @@ export function NewInventoryCashSaleModal({
           updatedAt: new Date().toISOString()
         }, { merge: true });
 
-        // 1b. Descontar stock y series en la colección global 'articles'
-        const artRef = doc(db, 'articles', selectedArticleId);
-        const artDoc = await transaction.get(artRef);
+        // 2b. Descontar stock y series en la colección global 'articles'
         if (artDoc.exists()) {
           const artCurrentStock = Number(artDoc.data().quantity) || 0;
           const artSeriesList: string[] = Array.isArray(artDoc.data().seriesList) ? artDoc.data().seriesList : [];

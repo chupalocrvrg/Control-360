@@ -11,6 +11,30 @@ export interface ChangelogRelease {
 
 export const staticChangelog: ChangelogRelease[] = [
   {
+    version: "5.47.1",
+    date: "2026-09-24",
+    changes: [
+      "Diseño Minimalista en Modal de Clientes: Eliminación de recuadros y bordes rígidos en subtítulos y secciones de los 3 pasos, dejando cabeceras limpias con jerarquía tipográfica fluida.",
+      "Unificación de Estilo de Campos (Inputs): Estandarización de todos los inputs, selectores y áreas de texto (incluyendo datos de Cónyuge, Arrendatario, Referencias Personales y Garante) con el fondo gris suave (bg-neutral-50) uniforme en todo el expediente."
+    ]
+  },
+  {
+    version: "5.47.0",
+    date: "2026-09-24",
+    changes: [
+      "Corrección de Capas Z-Index: El modal de edición de clientes y el visor de impresión de expediente ahora se renderizan con z-[180] y z-[190], apareciendo siempre por encima del modal de búsqueda de clientes sin solapamientos.",
+      "Flujo Guiado de 3 Pasos (Wizard): Rediseño de la creación de clientes con navegación paso a paso (Paso 1: Datos Principales, Paso 2: Secundarios & Buró/Laboral, Paso 3: Referencias & Garante) con validaciones progresivas.",
+      "Ampliación y Pie Fijo de Modal: Extensión de las dimensiones del modal al 90% de pantalla con barra de pestañas fija superior y barra de botones (Cancelar, Anterior, Siguiente y Guardar) anclada al pie inferior sin requerir zoom."
+    ]
+  },
+  {
+    version: "5.46.1",
+    date: "2026-09-24",
+    changes: [
+      "Corrección de Transacción de Firestore: Se reorganizó el orden de operaciones en la transacción atómica de ventas al contado (NewInventoryCashSaleModal) para garantizar que todas las lecturas (transaction.get) se ejecuten antes de cualquier escritura (transaction.set/update), resolviendo el error al descontar stock e inventarios."
+    ]
+  },
+  {
     version: "5.46.0",
     date: "2026-09-24",
     changes: [
