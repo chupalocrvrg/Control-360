@@ -861,7 +861,7 @@ export default function ClientsAndCredits() {
                       Cédula / RUC: {selectedClientDetail.idCard}
                     </p>
                   </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <button
                     type="button"
                     onClick={() => {
@@ -873,6 +873,50 @@ export default function ClientsAndCredits() {
                   >
                     <FileText className="w-3.5 h-3.5" />
                     Estado de Cuenta
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const appData: CreditApplicationPrintData = {
+                        applicationNumber: `SOL-${selectedClientDetail.idCard || selectedClientDetail.id.slice(0, 8).toUpperCase()}`,
+                        date: selectedClientDetail.createdAt ? selectedClientDetail.createdAt.split('T')[0] : new Date().toISOString().split('T')[0],
+                        client: selectedClientDetail,
+                        clientName: `${selectedClientDetail.lastName} ${selectedClientDetail.firstName}`.trim(),
+                        clientIdCard: selectedClientDetail.idCard,
+                        clientPhone: selectedClientDetail.phone,
+                        clientAddress: selectedClientDetail.address,
+                        clientCity: selectedClientDetail.city,
+                        clientEmail: selectedClientDetail.email,
+                        workplace: selectedClientDetail.workInfo?.workplace,
+                        workPosition: selectedClientDetail.workInfo?.position,
+                        workPhone: selectedClientDetail.workInfo?.workPhone,
+                        workAddress: selectedClientDetail.workInfo?.workAddress,
+                        spouseName: selectedClientDetail.spouseInfo?.lastName ? `${selectedClientDetail.spouseInfo.lastName} ${selectedClientDetail.spouseInfo.firstName || ''}`.trim() : undefined,
+                        spouseIdCard: selectedClientDetail.spouseInfo?.idCard,
+                        spousePhone: selectedClientDetail.spouseInfo?.phone,
+                        guarantorName: selectedClientDetail.guarantorName,
+                        guarantorIdCard: selectedClientDetail.guarantorIdCard,
+                        guarantorPhone: selectedClientDetail.guarantorPhone,
+                        references: selectedClientDetail.references || [],
+                        items: [],
+                        grossTotal: selectedClientDetail.creditLimit || 0,
+                        downPayment: 0,
+                        netFinancedAmount: selectedClientDetail.creditLimit || 0,
+                        frequency: 'MENSUAL',
+                        installmentsCount: 12,
+                        installmentAmount: Math.round((selectedClientDetail.creditLimit || 0) / 12),
+                        startDate: new Date().toISOString().split('T')[0],
+                        sellerName: 'ASESOR DE CRÉDITO'
+                      };
+                      setActiveApplicationData(appData);
+                      setIsApplicationModalOpen(true);
+                    }}
+                    className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs font-bold flex items-center gap-1.5 border border-emerald-200 dark:border-emerald-800"
+                    title="Imprimir expediente y solicitud de crédito"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    Expediente
                   </button>
 
                   <button

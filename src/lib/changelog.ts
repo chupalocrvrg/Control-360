@@ -11,6 +11,17 @@ export interface ChangelogRelease {
 
 export const staticChangelog: ChangelogRelease[] = [
   {
+    version: "5.46.0",
+    date: "2026-09-24",
+    changes: [
+      "Flujo Completo de Expediente de Clientes: Habilitación y validación obligatoria de las 6 secciones para clientes a Crédito (Datos Principales, Buró/Vivienda, Información Laboral/Económica, Cónyuge, Referencias y Garante Solidario).",
+      "Restauración de Botón Editar e Impresión de Expediente: Se vincularon las acciones de edición completa y la emisión del expediente impreso en la gestión de clientes.",
+      "Optimización de Venta al Contado: Eliminación de doble consulta de carga inicial y aceleración de apertura del modal.",
+      "Buscador Inteligente de Productos y Clientes: Reemplazo del selector simple por un campo predictivo con autocompletado por nombre, código, marca o serie, y reutilización de clientes registrados.",
+      "Emisión Automática de Carta de Venta: Generación e impresión inmediata de la Carta de Venta al Contado con transferencia de dominio, detalle técnico y firmas de almacén y comprador."
+    ]
+  },
+  {
     version: "5.45.2",
     date: "2026-09-23",
     changes: [

@@ -255,6 +255,16 @@ export const ClientModal: React.FC<ClientModalProps> = ({
         setActiveTab('credito');
         return;
       }
+      if (!workplace.trim() || !workPhone.trim()) {
+        showToast('Para clientes a Crédito, la información laboral (Lugar de Trabajo y Teléfono Laboral) es requerida.', 'warning');
+        setActiveTab('laboral');
+        return;
+      }
+      if (references.length < 2) {
+        showToast('Para clientes a Crédito, ingrese al menos 2 Referencias Personales en la pestaña "5. Referencias".', 'warning');
+        setActiveTab('referencias');
+        return;
+      }
     }
 
     // Garante seleccionado
