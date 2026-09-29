@@ -5,7 +5,7 @@ import { useNotification } from '../contexts/NotificationContext';
 import { db } from '../firebase';
 import { collection, query, where, getDocs, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
-import { formatCurrency, cn } from '../lib/utils';
+import { formatCurrency, cn, isSaleMoto } from '../lib/utils';
 import { CURRENT_VERSION } from '../lib/changelog';
 import { 
   format, isBefore, isToday, isTomorrow, parseISO, startOfDay, endOfMonth, 
@@ -87,6 +87,7 @@ export default function Dashboard() {
   const [reportStartDate, setReportStartDate] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [reportEndDate, setReportEndDate] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
   const [showCustomReportModal, setShowCustomReportModal] = useState(false);
+  const [allEmployees, setAllEmployees] = useState<any[]>([]);
   const [commerceData, setCommerceData] = useState<CommerceData | null>(null);
   const [allCommerceData, setAllCommerceData] = useState<CommerceData[]>([]);
   const [allSales, setAllSales] = useState<any[]>([]);
@@ -157,6 +158,7 @@ export default function Dashboard() {
 
       // 3. Process employees and budgets
       const employees = empSnap.docs.map(d => ({id: d.id, ...d.data()} as any));
+      setAllEmployees(employees);
       const budgets = budgetSnap.docs.map(d => d.data()).filter(b => b.month === currentMonth);
 
       // 4. Process sales history
@@ -172,18 +174,16 @@ export default function Dashboard() {
       setAllCollections(allCollsData);
 
       // Calculate time windows for filtering
-      const startOfMonthStr = format(startOfMonth(new Date()), 'yyyy-MM-dd');
-      const endOfMonthStr = format(endOfMonth(new Date()), 'yyyy-MM-dd');
+      const currentMonthStr = format(new Date(), 'yyyy-MM');
 
       const sales = allSalesData.filter(s => {
         if (!s.date || s.status === 'ANULADO') return false;
-        const time = parseISO(s.date).getTime();
-        return time >= parseISO(startOfMonthStr).getTime() && time <= parseISO(endOfMonthStr).getTime();
+        return s.date.startsWith(currentMonthStr);
       });
       const colls = allCollsData.filter(c => {
-        if (!c.initialDate || c.status === 'ANULADO') return false;
-        const time = parseISO(c.initialDate).getTime();
-        return time >= parseISO(startOfMonthStr).getTime() && time <= parseISO(endOfMonthStr).getTime();
+        const d = c.initialDate || c.paymentDate || c.date;
+        if (!d || c.status === 'ANULADO') return false;
+        return d.startsWith(currentMonthStr);
       });
 
 
@@ -191,18 +191,18 @@ export default function Dashboard() {
       const globalSalesBudget = employees.filter(e => !e.role.startsWith('supervisor')).reduce((sum, e) => sum + budgets.filter(b => b.employeeId === e.id).reduce((a, b) => a + (b.salesBudget || 0), 0), 0);
       const globalCollBudget = employees.filter(e => !e.role.startsWith('supervisor')).reduce((sum, e) => sum + budgets.filter(b => b.employeeId === e.id).reduce((a, b) => a + (b.collectionsBudget || 0), 0), 0);
       
-      const globalSales = sales.filter(s => !s.isMoto).reduce((acc, curr) => acc + (curr.totalValue || 0), 0);
-      const globalSalesContado = sales.filter(s => !s.isMoto && s.type === 'contado').reduce((acc, curr) => acc + (curr.totalValue || 0), 0);
-      const globalSalesCredito = sales.filter(s => !s.isMoto && s.type === 'credito').reduce((acc, curr) => acc + (curr.totalValue || 0), 0);
-      const globalMotoUnits = sales.filter(s => s.isMoto).length;
-      const globalMotoComb = sales.filter(s => s.isMoto && s.motoType === 'combustion').length;
-      const globalMotoElec = sales.filter(s => s.isMoto && s.motoType === 'electrico').length;
-      const globalMotosCont = sales.filter(s => s.isMoto && s.type === 'contado').length;
-      const globalMotosCred = sales.filter(s => s.isMoto && s.type === 'credito').length;
-      const globalMotosContVal = sales.filter(s => s.isMoto && s.type === 'contado').reduce((a, c) => a + (c.totalValue || 0), 0);
-      const globalMotosCredVal = sales.filter(s => s.isMoto && s.type === 'credito').reduce((a, c) => a + (c.totalValue || 0), 0);
+      const globalSales = sales.filter(s => !isSaleMoto(s)).reduce((acc, curr) => acc + (curr.totalValue || 0), 0);
+      const globalSalesContado = sales.filter(s => !isSaleMoto(s) && s.type === 'contado').reduce((acc, curr) => acc + (curr.totalValue || 0), 0);
+      const globalSalesCredito = sales.filter(s => !isSaleMoto(s) && s.type === 'credito').reduce((acc, curr) => acc + (curr.totalValue || 0), 0);
+      const globalMotoUnits = sales.filter(s => isSaleMoto(s)).length;
+      const globalMotoComb = sales.filter(s => isSaleMoto(s) && s.motoType === 'combustion').length;
+      const globalMotoElec = sales.filter(s => isSaleMoto(s) && s.motoType === 'electrico').length;
+      const globalMotosCont = sales.filter(s => isSaleMoto(s) && s.type === 'contado').length;
+      const globalMotosCred = sales.filter(s => isSaleMoto(s) && s.type === 'credito').length;
+      const globalMotosContVal = sales.filter(s => isSaleMoto(s) && s.type === 'contado').reduce((a, c) => a + (c.totalValue || 0), 0);
+      const globalMotosCredVal = sales.filter(s => isSaleMoto(s) && s.type === 'credito').reduce((a, c) => a + (c.totalValue || 0), 0);
       
-      const globalColls = colls.reduce((acc, curr) => acc + (curr.totalCollected || 0), 0);
+      const globalColls = colls.reduce((acc, curr) => acc + (curr.totalCollected || curr.amount || 0), 0);
 
       const commerceArray = employees.map(emp => {
 
@@ -214,45 +214,31 @@ export default function Dashboard() {
         let sBudget = empBudgets.reduce((acc, curr) => acc + (curr.salesBudget || 0), 0);
         let cBudget = empBudgets.reduce((acc, curr) => acc + (curr.collectionsBudget || 0), 0);
 
-        let totalSales = 0, salesContado = 0, salesCredito = 0;
-        let motoUnits = 0, motoCombustion = 0, motoElectric = 0;
-        let motosContado = 0, motosCredito = 0, motosContadoVal = 0, motosCreditoVal = 0;
-        let totalCollections = 0;
-
+        // Si es supervisor y no tiene presupuesto personal registrado, asume la meta global
         if (isSupervisor) {
-          if (canSell) {
-             sBudget = sBudget || globalSalesBudget;
-             totalSales = globalSales;
-             salesContado = globalSalesContado;
-             salesCredito = globalSalesCredito;
-             motoUnits = globalMotoUnits;
-             motoCombustion = globalMotoComb;
-             motoElectric = globalMotoElec;
-             motosContado = globalMotosCont;
-             motosCredito = globalMotosCred;
-             motosContadoVal = globalMotosContVal;
-             motosCreditoVal = globalMotosCredVal;
-          }
-          if (canCollect) {
-             cBudget = cBudget || globalCollBudget;
-             totalCollections = globalColls;
-          }
-        } else {
-          const empSales = sales.filter(s => s.employeeId === emp.id);
-          totalSales = empSales.filter(s => !s.isMoto).reduce((acc, curr) => acc + (curr.totalValue || 0), 0);
-          salesContado = empSales.filter(s => !s.isMoto && s.type === 'contado').reduce((acc, curr) => acc + (curr.totalValue || 0), 0);
-          salesCredito = empSales.filter(s => !s.isMoto && s.type === 'credito').reduce((acc, curr) => acc + (curr.totalValue || 0), 0);
-          motoUnits = empSales.filter(s => s.isMoto).length;
-          motoCombustion = empSales.filter(s => s.isMoto && s.motoType === 'combustion').length;
-          motoElectric = empSales.filter(s => s.isMoto && s.motoType === 'electrico').length;
-          motosContado = empSales.filter(s => s.isMoto && s.type === 'contado').length;
-          motosCredito = empSales.filter(s => s.isMoto && s.type === 'credito').length;
-          motosContadoVal = empSales.filter(s => s.isMoto && s.type === 'contado').reduce((acc, curr) => acc + (curr.totalValue || 0), 0);
-          motosCreditoVal = empSales.filter(s => s.isMoto && s.type === 'credito').reduce((acc, curr) => acc + (curr.totalValue || 0), 0);
-
-          const empColls = colls.filter(c => c.employeeId === emp.id);
-          totalCollections = empColls.reduce((acc, curr) => acc + (curr.totalCollected || 0), 0);
+          if (canSell && sBudget === 0) sBudget = globalSalesBudget;
+          if (canCollect && cBudget === 0) cBudget = globalCollBudget;
         }
+
+        // Ventas personales del empleado / supervisor (regla unificada con módulo de Empleados)
+        const empSales = sales.filter(s => s.employeeId === emp.id);
+        const articleSales = empSales.filter(s => !isSaleMoto(s));
+        const motoSales = empSales.filter(s => isSaleMoto(s));
+
+        const totalSales = articleSales.reduce((acc, curr) => acc + (curr.totalValue || 0), 0);
+        const salesContado = articleSales.filter(s => s.type === 'contado').reduce((acc, curr) => acc + (curr.totalValue || 0), 0);
+        const salesCredito = articleSales.filter(s => s.type === 'credito').reduce((acc, curr) => acc + (curr.totalValue || 0), 0);
+
+        const motoUnits = motoSales.length;
+        const motoCombustion = motoSales.filter(s => s.motoType === 'combustion').length;
+        const motoElectric = motoSales.filter(s => s.motoType === 'electrico').length;
+        const motosContado = motoSales.filter(s => s.type === 'contado').length;
+        const motosCredito = motoSales.filter(s => s.type === 'credito').length;
+        const motosContadoVal = motoSales.filter(s => s.type === 'contado').reduce((acc, curr) => acc + (curr.totalValue || 0), 0);
+        const motosCreditoVal = motoSales.filter(s => s.type === 'credito').reduce((acc, curr) => acc + (curr.totalValue || 0), 0);
+
+        const empColls = colls.filter(c => c.employeeId === emp.id);
+        const totalCollections = empColls.reduce((acc, curr) => acc + (curr.totalCollected || curr.amount || 0), 0);
 
         const fullName = `${emp.name || ''} ${emp.lastName || ''}`.trim();
         const portfolioEvolution = getCollectorPortfolioEvolution(
@@ -1232,7 +1218,11 @@ const handleGenerateAdvancedReport = async (reportType: 'pdf' | 'excel' | 'previ
           onClose={() => setShowCustomReportModal(false)}
           allSales={allSales}
           allCollections={allCollections}
-          employees={allCommerceData.map(c => c.employee)}
+          employees={allEmployees.length > 0 ? allEmployees : allCommerceData.map(c => c.employee).filter(Boolean)}
+          checks={checks}
+          allCommerceData={allCommerceData}
+          portfolioSnapshots={portfolioSnapshots}
+          currency={settings.currency}
         />
       )}
 
@@ -1656,253 +1646,6 @@ const handleGenerateAdvancedReport = async (reportType: 'pdf' | 'excel' | 'previ
 
         </div>
       </div>
-
-      {showCustomReportModal && (
-        <div className="fixed inset-0 z-[1000] bg-neutral-900/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className={cn(
-            "bg-white dark:bg-neutral-900 w-full rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[92vh]",
-            showReportPreview ? "max-w-5xl" : "max-w-xl"
-          )}>
-            <div className="p-5 border-b border-neutral-100 dark:border-neutral-800 bg-indigo-600 text-white flex justify-between items-center shrink-0">
-              <div className="flex items-center gap-2">
-                <BarChart3 className="w-5 h-5" />
-                <h3 className="font-bold text-lg">Reporte Comercial y Cartera</h3>
-              </div>
-              <button 
-                onClick={() => {
-                  setShowCustomReportModal(false);
-                  setShowReportPreview(false);
-                }} 
-                className="opacity-80 hover:opacity-100 transition-opacity text-2xl font-bold px-2"
-              >
-                &times;
-              </button>
-            </div>
-
-            <div className="p-6 space-y-6 overflow-y-auto">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase tracking-widest font-black text-neutral-500">Fecha Inicial (Inicio Mes/Periodo)</label>
-                  <input 
-                    type="date" 
-                    value={reportStartDate} 
-                    onChange={e => {
-                      setReportStartDate(e.target.value);
-                      setShowReportPreview(false);
-                    }}
-                    className="w-full bg-neutral-50 dark:bg-neutral-800 p-3 rounded-xl border border-neutral-200 dark:border-neutral-700 outline-none dark:text-neutral-100 font-medium text-sm"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] uppercase tracking-widest font-black text-neutral-500">Fecha Final (Fin de Mes/Corte)</label>
-                  <input 
-                    type="date" 
-                    value={reportEndDate} 
-                    onChange={e => {
-                      setReportEndDate(e.target.value);
-                      setShowReportPreview(false);
-                    }}
-                    className="w-full bg-neutral-50 dark:bg-neutral-800 p-3 rounded-xl border border-neutral-200 dark:border-neutral-700 outline-none dark:text-neutral-100 font-medium text-sm"
-                  />
-                </div>
-              </div>
-              
-              <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-neutral-50 dark:bg-neutral-800/60 rounded-2xl border border-neutral-200 dark:border-neutral-700">
-                <div className="text-xs text-neutral-600 dark:text-neutral-400">
-                  <span className="font-bold text-neutral-900 dark:text-neutral-100">Regla de Cortes de Cartera:</span> Se toma automáticamente como Inicio de Mes el primer corte registrado y como Fin de Mes el último corte cargado del periodo.
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleGenerateAdvancedReport('preview')}
-                  disabled={previewLoading}
-                  className="px-4 py-2 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 font-bold text-xs rounded-xl border border-indigo-200 dark:border-indigo-800 flex items-center gap-1.5 transition-colors"
-                >
-                  <Eye className="w-4 h-4" />
-                  {previewLoading ? 'Calculando...' : showReportPreview ? 'Actualizar Vista Previa' : 'Previsualizar en Pantalla'}
-                </button>
-              </div>
-
-              {/* On-Screen Preview (Option C) */}
-              {showReportPreview && reportPreviewData && (
-                <div className="space-y-5 animate-in fade-in slide-in-from-top-2">
-                  {/* Table 1: Balance de Cobranzas por Cobrador */}
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-1.5">
-                      <Receipt className="w-4 h-4 text-sky-500" />
-                      Balance de Cobranzas por Cobrador
-                    </h4>
-                    <div className="border border-neutral-200 dark:border-neutral-800 rounded-2xl overflow-x-auto bg-white dark:bg-neutral-900">
-                      <table className="w-full text-xs">
-                        <thead className="bg-sky-50 dark:bg-sky-950/50 text-sky-900 dark:text-sky-200 border-b border-sky-100 dark:border-sky-900">
-                          <tr>
-                            <th className="py-2.5 px-3 text-left font-bold">Cobrador</th>
-                            <th className="py-2.5 px-3 text-right font-bold">Total Cobrado ($)</th>
-                            <th className="py-2.5 px-3 text-right font-bold">Presupuesto ($)</th>
-                            <th className="py-2.5 px-3 text-right font-bold">% Cump.</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                          {reportPreviewData.empCobros.length > 0 ? (
-                            reportPreviewData.empCobros.map((e, idx) => (
-                              <tr key={idx} className="hover:bg-neutral-50/50 dark:hover:bg-neutral-800/40">
-                                <td className="py-2 px-3 font-semibold text-neutral-800 dark:text-neutral-200">{e.name}</td>
-                                <td className="py-2 px-3 text-right font-mono font-bold text-neutral-900 dark:text-neutral-100">
-                                  ${e.collections.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                </td>
-                                <td className="py-2 px-3 text-right font-mono text-neutral-600 dark:text-neutral-400">
-                                  ${e.collBudget.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                </td>
-                                <td className="py-2 px-3 text-right font-bold text-sky-600 dark:text-sky-400">
-                                  {e.pctC}
-                                </td>
-                              </tr>
-                            ))
-                          ) : (
-                            <tr>
-                              <td colSpan={4} className="py-3 px-3 text-center text-neutral-400 italic">
-                                Sin cobros registrados en el periodo
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  {/* Table 2: Continuación - Evolución de Cartera por Cobrador (Inicio de Mes vs. Fin de Mes) */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-bold text-neutral-900 dark:text-neutral-100 flex items-center gap-1.5">
-                        <Briefcase className="w-4 h-4 text-emerald-600" />
-                        Continuación: Evolución de Cartera por Cobrador (Inicio vs. Fin de Mes)
-                      </h4>
-                      {reportPreviewData.cutoffs.initialDate && reportPreviewData.cutoffs.closingDate && (
-                        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">
-                          Cortes: {reportPreviewData.cutoffs.initialDate} al {reportPreviewData.cutoffs.closingDate}
-                        </span>
-                      )}
-                    </div>
-                    
-                    <div className="border border-neutral-200 dark:border-neutral-800 rounded-2xl overflow-x-auto bg-white dark:bg-neutral-900">
-                      <table className="w-full text-xs">
-                        <thead className="bg-emerald-50 dark:bg-emerald-950/50 text-emerald-900 dark:text-emerald-200 border-b border-emerald-100 dark:border-emerald-900">
-                          <tr>
-                            <th className="py-2.5 px-3 text-left font-bold">Cobrador</th>
-                            <th className="py-2.5 px-3 text-right font-bold">Cartera Inicio ($)</th>
-                            <th className="py-2.5 px-3 text-right font-bold">Cartera Fin ($)</th>
-                            <th className="py-2.5 px-3 text-right font-bold">Recup. / Var. ($)</th>
-                            <th className="py-2.5 px-3 text-right font-bold">% Var.</th>
-                            <th className="py-2.5 px-3 text-right font-bold">Inicio Al Día ($)</th>
-                            <th className="py-2.5 px-3 text-right font-bold">Fin Al Día ($)</th>
-                            <th className="py-2.5 px-3 text-right font-bold">Inicio Venc. ($)</th>
-                            <th className="py-2.5 px-3 text-right font-bold">Fin Venc. ($)</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                          {reportPreviewData.portfolioRows.length > 0 ? (
-                            reportPreviewData.portfolioRows.map((row, idx) => (
-                              <tr key={idx} className="hover:bg-neutral-50/50 dark:hover:bg-neutral-800/40">
-                                <td className="py-2 px-3 font-semibold text-neutral-800 dark:text-neutral-200">{row.name}</td>
-                                <td className="py-2 px-3 text-right font-mono font-medium">
-                                  ${row.initialAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                </td>
-                                <td className="py-2 px-3 text-right font-mono font-bold text-neutral-900 dark:text-neutral-100">
-                                  ${row.closingAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                </td>
-                                <td className={cn(
-                                  "py-2 px-3 text-right font-mono font-bold",
-                                  row.variationAmount <= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
-                                )}>
-                                  {row.variationAmount <= 0 ? `-$${row.recoveredAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : `+$${row.variationAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
-                                </td>
-                                <td className="py-2 px-3 text-right font-bold text-neutral-700 dark:text-neutral-300">
-                                  {row.initialAmount > 0 ? `${row.variationPct >= 0 ? '+' : ''}${row.variationPct.toFixed(1)}%` : '0%'}
-                                </td>
-                                <td className="py-2 px-3 text-right font-mono text-neutral-600 dark:text-neutral-400">
-                                  ${row.initialOnTimeAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                </td>
-                                <td className="py-2 px-3 text-right font-mono text-neutral-800 dark:text-neutral-200">
-                                  ${row.closingOnTimeAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                </td>
-                                <td className="py-2 px-3 text-right font-mono text-neutral-600 dark:text-neutral-400">
-                                  ${row.initialOverdueAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                </td>
-                                <td className="py-2 px-3 text-right font-mono text-neutral-800 dark:text-neutral-200">
-                                  ${row.closingOverdueAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                </td>
-                              </tr>
-                            ))
-                          ) : (
-                            <tr>
-                              <td colSpan={9} className="py-3 px-3 text-center text-neutral-400 italic">
-                                Sin cortes de cartera registrados en el periodo
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                        {reportPreviewData.portfolioRows.length > 0 && (
-                          <tfoot className="bg-neutral-100/80 dark:bg-neutral-800/80 font-bold border-t-2 border-neutral-200 dark:border-neutral-700">
-                            <tr>
-                              <td className="py-2.5 px-3 text-left">TOTAL CONSOLIDADO</td>
-                              <td className="py-2.5 px-3 text-right font-mono">
-                                ${reportPreviewData.totalInit.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                              </td>
-                              <td className="py-2.5 px-3 text-right font-mono">
-                                ${reportPreviewData.totalClose.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                              </td>
-                              <td className={cn(
-                                "py-2.5 px-3 text-right font-mono",
-                                (reportPreviewData.totalClose - reportPreviewData.totalInit) <= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
-                              )}>
-                                {(reportPreviewData.totalClose - reportPreviewData.totalInit) <= 0 
-                                  ? `-$${reportPreviewData.totalRecov.toLocaleString('en-US', { minimumFractionDigits: 2 })}` 
-                                  : `+$${(reportPreviewData.totalClose - reportPreviewData.totalInit).toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
-                              </td>
-                              <td className="py-2.5 px-3 text-right">
-                                {reportPreviewData.totalVarPct}
-                              </td>
-                              <td className="py-2.5 px-3 text-right font-mono">
-                                ${reportPreviewData.totalInitOnTime.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                              </td>
-                              <td className="py-2.5 px-3 text-right font-mono">
-                                ${reportPreviewData.totalCloseOnTime.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                              </td>
-                              <td className="py-2.5 px-3 text-right font-mono">
-                                ${reportPreviewData.totalInitOverdue.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                              </td>
-                              <td className="py-2.5 px-3 text-right font-mono">
-                                ${reportPreviewData.totalCloseOverdue.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                              </td>
-                            </tr>
-                          </tfoot>
-                        )}
-                      </table>
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              <div className="flex gap-4 pt-2 border-t border-neutral-100 dark:border-neutral-800">
-                <button 
-                  onClick={() => handleGenerateAdvancedReport('pdf')}
-                  className="w-full py-3.5 bg-indigo-600 text-white font-bold rounded-2xl shadow-lg hover:bg-indigo-700 transition-all hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2 text-sm"
-                >
-                  <Receipt className="w-4 h-4" />
-                  Descargar PDF Completo
-                </button>
-                <button 
-                  onClick={() => handleGenerateAdvancedReport('excel')}
-                  className="w-full py-3.5 bg-emerald-600 text-white font-bold rounded-2xl shadow-lg hover:bg-emerald-700 transition-all hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center gap-2 text-sm"
-                >
-                  <BarChart3 className="w-4 h-4" />
-                  Descargar Excel Completo
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
 
 {/* Commerce Section */}
       <section className="space-y-6 pt-8 border-t border-neutral-200 dark:border-neutral-800">

@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../firebase';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, Timestamp, query, where, writeBatch } from 'firebase/firestore';
-import { Plus, Pencil, Trash2, Users, AlertCircle, Save, X, Target, Calendar, Search, ShoppingBag, ChevronDown, ChevronUp, DollarSign, TrendingUp, Award } from 'lucide-react';
+import { Plus, Pencil, Trash2, Users, AlertCircle, Save, X, Target, Calendar, Search, ShoppingBag, ChevronDown, ChevronUp, DollarSign, TrendingUp, Award, Bike } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../contexts/NotificationContext';
 import { logAudit, AuditAction } from '../lib/audit';
 import { format, startOfMonth, addMonths, subMonths, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { isSaleMoto } from '../lib/utils';
 import { NewManualSaleModal } from '../components/employees/NewManualSaleModal';
 import { ManualCollectionModal } from '../components/collections/ManualCollectionModal';
 import { BadgeDollarSign } from 'lucide-react';
@@ -52,6 +53,7 @@ export default function Employees() {
   const [manualCollections, setManualCollections] = useState<any[]>([]);
   const [expandedSellerId, setExpandedSellerId] = useState<string | null>(null);
   const [expandedCollectorId, setExpandedCollectorId] = useState<string | null>(null);
+  const [sellerSearchTerms, setSellerSearchTerms] = useState<Record<string, string>>({});
   
   // Search and tabs
   const [searchTerm, setSearchTerm] = useState('');
@@ -168,7 +170,7 @@ export default function Employees() {
       const snapSales = await getDocs(qSales);
       const salesForMonth = snapSales.docs
         .map(d => ({ id: d.id, ...d.data() } as any))
-        .filter(s => s.date && s.date.startsWith(currentMonth));
+        .filter(s => s.date && s.status !== 'ANULADO' && s.date.startsWith(currentMonth));
       setSalesRecords(salesForMonth);
 
       // 3. Fetch credit payments for the month to calculate collections metrics
@@ -694,10 +696,26 @@ export default function Employees() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {employees.filter(e => ['vendedor', 'ambos', 'supervisor_ventas', 'supervisor_general'].includes(e.role)).map(seller => {
               const sellerSales = salesRecords.filter(s => s.employeeId === seller.id);
-              const realSalesTotal = sellerSales.reduce((acc, s) => acc + (s.totalValue || 0), 0);
+
+              // Separación estricta: Artículos suman a dinero, Motos suman solo a unidades
+              const articleSales = sellerSales.filter(s => !isSaleMoto(s));
+              const motoSales = sellerSales.filter(s => isSaleMoto(s));
+
+              const realSalesTotal = articleSales.reduce((acc, s) => acc + (s.totalValue || 0), 0);
+              const motoUnitsCount = motoSales.length;
+
               const targetGoal = budgets[seller.id]?.salesBudget || 0;
               const percentage = targetGoal > 0 ? Math.min(Math.round((realSalesTotal / targetGoal) * 100), 200) : 0;
               const isExpanded = expandedSellerId === seller.id;
+
+              // Filtro predictivo dentro del detalle de ventas
+              const currentSearch = (sellerSearchTerms[seller.id] || '').trim().toLowerCase();
+              const filteredDetailSales = sellerSales.filter(s => {
+                if (!currentSearch) return true;
+                const client = (s.clientName || '').toLowerCase();
+                const art = (s.article || '').toLowerCase();
+                return client.includes(currentSearch) || art.includes(currentSearch);
+              });
 
               return (
                 <div
@@ -736,7 +754,7 @@ export default function Employees() {
                   </div>
 
                   {/* Resumen numérico */}
-                  <div className="grid grid-cols-2 gap-2 text-xs mb-3 p-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200/60 dark:border-neutral-800">
+                  <div className="grid grid-cols-2 gap-2 text-xs mb-2 p-2.5 rounded-xl bg-white dark:bg-neutral-900 border border-neutral-200/60 dark:border-neutral-800">
                     <div>
                       <p className="text-[10px] text-neutral-400 font-medium">Meta Asignada</p>
                       <p className="font-bold text-neutral-700 dark:text-neutral-300">
@@ -744,10 +762,24 @@ export default function Employees() {
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-[10px] text-neutral-400 font-medium">Ventas Reales</p>
+                      <p className="text-[10px] text-neutral-400 font-medium">Ventas Reales (Artículos)</p>
                       <p className="font-bold text-emerald-600 dark:text-emerald-400">
                         ${realSalesTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                       </p>
+                    </div>
+                  </div>
+
+                  {/* Contador separado de Motos vendidas (Unidades físicas) */}
+                  <div className="flex items-center justify-between px-3 py-1.5 mb-3 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 text-[11px]">
+                    <span className="font-bold text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
+                      <Bike className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                      Motos Vendidas:
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-black px-2 py-0.5 rounded-full bg-white dark:bg-neutral-800 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800 text-xs">
+                        {motoUnitsCount} {motoUnitsCount === 1 ? 'unidad' : 'unidades'}
+                      </span>
+                      <span className="text-[10px] text-neutral-400 font-medium">(Solo unid.)</span>
                     </div>
                   </div>
 
@@ -761,58 +793,104 @@ export default function Employees() {
                     {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                   </button>
 
-                  {/* Listado Desplegable */}
+                  {/* Listado Desplegable con Buscador Predictivo */}
                   {isExpanded && (
-                    <div className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-700 space-y-2 max-h-56 overflow-y-auto pr-1">
-                      {sellerSales.length === 0 ? (
+                    <div className="mt-3 pt-3 border-t border-neutral-200 dark:border-neutral-700 space-y-2 max-h-72 overflow-y-auto pr-1">
+                      
+                      {/* Cuadro de búsqueda predictiva en detalle de ventas */}
+                      <div className="relative mb-2">
+                        <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-400" />
+                        <input
+                          type="text"
+                          placeholder="Buscar cliente o artículo..."
+                          value={sellerSearchTerms[seller.id] || ''}
+                          onChange={(e) => setSellerSearchTerms(prev => ({ ...prev, [seller.id]: e.target.value }))}
+                          className="w-full pl-8 pr-7 py-1.5 text-xs bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-neutral-900 dark:text-white placeholder:text-neutral-400"
+                        />
+                        {sellerSearchTerms[seller.id] && (
+                          <button
+                            type="button"
+                            onClick={() => setSellerSearchTerms(prev => ({ ...prev, [seller.id]: '' }))}
+                            className="p-1 absolute right-1.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 rounded"
+                            title="Limpiar búsqueda"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {sellerSearchTerms[seller.id] && (
+                        <div className="flex items-center justify-between text-[10px] text-neutral-500 mb-1 px-1">
+                          <span>Filtrando por cliente/artículo:</span>
+                          <span className="font-bold text-indigo-600 dark:text-indigo-400">{filteredDetailSales.length} de {sellerSales.length}</span>
+                        </div>
+                      )}
+
+                      {filteredDetailSales.length === 0 ? (
                         <p className="text-[11px] text-neutral-400 text-center py-2">
-                          Sin ventas registradas en este mes.
+                          {sellerSearchTerms[seller.id]
+                            ? `No se encontraron ventas para "${sellerSearchTerms[seller.id]}".`
+                            : 'Sin ventas registradas en este mes.'}
                         </p>
                       ) : (
-                        sellerSales.map((s) => (
-                          <div
-                            key={s.id}
-                            className="p-2 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200/60 dark:border-neutral-800 text-[11px] flex justify-between items-center"
-                          >
-                            <div className="flex-1 truncate pr-2">
-                              <p className="font-bold text-neutral-900 dark:text-white truncate">
-                                {s.clientName || 'Cliente sin nombre'}
-                              </p>
-                              <p className="text-[10px] text-neutral-400">
-                                {s.article} • {s.date}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {s.isManual && (
-                                <button
-                                  onClick={() => {
-                                    setEditingSale(s);
-                                    setIsManualSaleModalOpen(true);
-                                  }}
-                                  className="p-1.5 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors"
-                                  title="Editar venta manual"
-                                >
-                                  <Pencil className="w-3 h-3" />
-                                </button>
-                              )}
-                              <div className="text-right whitespace-nowrap">
-                                <span className="font-bold text-neutral-900 dark:text-neutral-100">
-                                  ${s.totalValue?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                </span>
-                                <span className={`block text-[9px] font-bold uppercase ${s.type === 'credito' ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                                  {s.type}
-                                </span>
+                        filteredDetailSales.map((s) => {
+                          const isMotoItem = isSaleMoto(s);
+                          return (
+                            <div
+                              key={s.id}
+                              className="p-2 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200/60 dark:border-neutral-800 text-[11px] flex justify-between items-center"
+                            >
+                              <div className="flex-1 truncate pr-2">
+                                <div className="flex items-center gap-1.5">
+                                  <p className="font-bold text-neutral-900 dark:text-white truncate">
+                                    {s.clientName || 'Cliente sin nombre'}
+                                  </p>
+                                  {isMotoItem ? (
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                                      Moto (1 unid)
+                                    </span>
+                                  ) : (
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                      Artículo
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[10px] text-neutral-400">
+                                  {s.article} • {s.date} {isMotoItem ? '• (No suma a meta monetaria)' : ''}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {s.isManual && (
+                                  <button
+                                    onClick={() => {
+                                      setEditingSale(s);
+                                      setIsManualSaleModalOpen(true);
+                                    }}
+                                    className="p-1.5 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors"
+                                    title="Editar venta manual"
+                                  >
+                                    <Pencil className="w-3 h-3" />
+                                  </button>
+                                )}
+                                <div className="text-right whitespace-nowrap">
+                                  <span className="font-bold text-neutral-900 dark:text-neutral-100">
+                                    ${s.totalValue?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                  </span>
+                                  <span className={`block text-[9px] font-bold uppercase ${s.type === 'credito' ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                    {s.type}
+                                  </span>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                   )}
                 </div>
               );
             })}
-           </div>
+          </div>
           </div>
 
           {/* Sección de Rendimiento y Balance de Cobranza: Meta vs Cobranza Real Desplegables */}

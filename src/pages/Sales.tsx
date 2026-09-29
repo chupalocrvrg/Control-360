@@ -905,7 +905,7 @@ export default function Sales() {
               title="Registrar venta manual / externa para cumplimiento presupuestario sin descontar stock de bodega"
             >
               <ShoppingBag className="w-4 h-4" />
-              Ventas Manuales
+              Generar Venta Manual
             </button>
             <button
               onClick={() => setIsCreditSaleModalOpen(true)}

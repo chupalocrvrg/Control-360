@@ -207,3 +207,18 @@ export function cleanFirestoreData<T>(obj: T): T {
   return obj;
 }
 
+/**
+ * Standard business rule for classifying motorcycle sales across all modules.
+ * Motos do NOT add to monetary budget goals; they are counted strictly in physical units.
+ */
+export function isSaleMoto(s: any): boolean {
+  if (!s) return false;
+  if (s.isMoto === true || s.isMoto === 'true' || s.isMoto === 1) return true;
+  if (s.motoType && s.motoType !== null) return true;
+  if (s.article && typeof s.article === 'string') {
+    const art = s.article.trim().toLowerCase();
+    if (art.startsWith('moto') || art.includes('motocicleta')) return true;
+  }
+  return false;
+}
+

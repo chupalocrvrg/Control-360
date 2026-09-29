@@ -11,6 +11,45 @@ export interface ChangelogRelease {
 
 export const staticChangelog: ChangelogRelease[] = [
   {
+    version: "5.50.2",
+    date: "2026-09-29",
+    changes: [
+      "Unificación de Criterio de Ventas Netas (Fuente Única de Verdad): Sincronización exacta de la fórmula de cálculo de 'Ventas Reales / Netas' entre Dashboard > Ventas Netas, Comercio > Empleados > Presupuestos Mensuales y Reporte General Gerencial.",
+      "Exclusión Estricta de Ventas Anuladas: Ambas vistas ahora descartan de forma estricta las ventas con estado 'ANULADO'.",
+      "Estandarización de la Regla de Motos: Aplicación compartida de la función `isSaleMoto` para que el valor monetario de las motos nunca se sume al cumplimiento financiero de metas y se registre únicamente como unidades físicas.",
+      "Alineación de Supervisores a Ventas Personales: En las tarjetas de rendimiento comercial del Dashboard, los supervisores ahora muestran sus ventas personales directas para coincidir 1:1 con su detalle mensual en Empleados."
+    ]
+  },
+  {
+    version: "5.50.1",
+    date: "2026-09-29",
+    changes: [
+      "Auditoría y Corrección de Robustez en Código: Configuración de deduplicación de React en vite.config.ts para prevenir colisiones de hooks o dependencias en tiempo de ejecución.",
+      "Optimización de Filtrado por Fechas en Reportes: Ajuste en la comparación de fechas límite para garantizar la inclusión integral de todos los registros del último día del mes sin afección por zonas horarias.",
+      "Consistencia en Selección de Personal y Modal de Ventas: Garantía de asignación por defecto del vendedor al abrir el formulario de ventas manuales y paso de lista completa de empleados en el panel principal."
+    ]
+  },
+  {
+    version: "5.50.0",
+    date: "2026-09-29",
+    changes: [
+      "Búsqueda Predictiva de Clientes en Ventas Manuales: Implementación de campo de autocompletado y búsqueda predictiva interactiva que consulta clientes registrados de la base de datos (con filtrado por nombre, cédula o teléfono) e identificación de clientes nuevos.",
+      "Control Antiduplicados en Registro de Ventas: Validación previa antes del guardado que detecta coincidencias simultáneas de Mismo Cliente + Mismo Artículo + Mismo Vendedor + Mismo Valor, solicitando confirmación explícita mediante alerta para evitar duplicidades por error.",
+      "Corrección en Cálculo de Metas Presupuestarias (Exclusión Monetaria de Motos): En Comercio > Empleados > Presupuestos Mensuales > Detalle de Ventas, las motos ya no inflan las Ventas Reales en dinero; ahora el cumplimiento monetario suma estrictamente artículos comerciales, mientras que las motos se contabilizan en un contador físico separado de 'Unidades vendidas'.",
+      "Buscador Predictivo en Detalle de Ventas por Vendedor: Incorporación de un cuadro de búsqueda predictiva en el acordeón desplegable de ventas mensuales para auditar y verificar rápidamente transacciones por cliente o artículo."
+    ]
+  },
+  {
+    version: "5.49.0",
+    date: "2026-09-29",
+    changes: [
+      "Reestructuración Integral del Reporte General Gerencial: Restauración del formato consolidado sin requerir filtros individuales de empleado, integrando Resumen Financiero (Cheques programados y cancelados, Ventas Contado, Cobros y Balance Neto), Rendimiento de Ventas por Vendedor (con conteo de Motos por UNIDAD y artículos), Cobranza por Cobrador (desglosado en Agencia/Oficina, Transferencias y Efectivo Ruta) y Detalle de Cheques.",
+      "Nueva Funcionalidad 'Detallar Ventas': Incorporación del selector condicional '[ ] Detallar ventas al final' para desplegar el desglose pormenorizado de ventas organizado por vendedor (Cliente, Artículo, Contado/Crédito y Valor).",
+      "Aislamiento Estricto de Roles y Filtros Dinámicos en Reportes Personalizados: Separación total entre Ventas y Cobranzas. Al filtrar por Ventas, se ocultan cobradores y se aísla exclusivamente la actividad comercial (incluso en empleados con rol mixto). Al filtrar por Cobranzas, se ocultan vendedores y tipo de venta.",
+      "Garantía de Impresión y Auto-Ajuste de Columnas: Configuración en formato horizontal (Landscape A4) con anchos de columna adaptativos y márgenes controlados en PDF y Excel para asegurar que ninguna tabla exceda los límites de la página."
+    ]
+  },
+  {
     version: "5.48.5",
     date: "2026-09-28",
     changes: [
