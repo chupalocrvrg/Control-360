@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase';
-import { collection, getDocs, addDoc, query, where } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, doc, query, where } from 'firebase/firestore';
 import { X, User, ShoppingCart, DollarSign, Calendar, AlertCircle, Save, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotification } from '../../contexts/NotificationContext';
@@ -14,6 +14,7 @@ interface NewManualSaleModalProps {
   employees: Employee[];
   currentMonth?: string;
   onSuccess: () => void;
+  initialSale?: any | null;
 }
 
 export function NewManualSaleModal({
@@ -21,7 +22,8 @@ export function NewManualSaleModal({
   onClose,
   employees,
   currentMonth,
-  onSuccess
+  onSuccess,
+  initialSale
 }: NewManualSaleModalProps) {
   const { user, profile } = useAuth();
   const { showToast } = useNotification();
@@ -42,19 +44,30 @@ export function NewManualSaleModal({
 
   useEffect(() => {
     if (isOpen && currentEnterpriseId) {
-      // Reset form
-      setClientName('');
-      setArticle('');
-      setDate(format(new Date(), 'yyyy-MM-dd'));
-      setType('contado');
-      setIsMoto(false);
-      setMotoType('combustion');
-      setTotalValue('');
-      
-      // Default employee if available
-      const sellers = employees.filter(e => ['vendedor', 'ambos', 'supervisor_ventas', 'supervisor_general'].includes(e.role));
-      if (sellers.length > 0 && !employeeId) {
-        setEmployeeId(sellers[0].id);
+      if (initialSale) {
+        setClientName(initialSale.clientName || '');
+        setArticle(initialSale.article || '');
+        setDate(initialSale.date || format(new Date(), 'yyyy-MM-dd'));
+        setType(initialSale.type || 'contado');
+        setEmployeeId(initialSale.employeeId || '');
+        setIsMoto(!!initialSale.isMoto);
+        setMotoType(initialSale.motoType || 'combustion');
+        setTotalValue(initialSale.totalValue?.toString() || '');
+      } else {
+        // Reset form
+        setClientName('');
+        setArticle('');
+        setDate(format(new Date(), 'yyyy-MM-dd'));
+        setType('contado');
+        setIsMoto(false);
+        setMotoType('combustion');
+        setTotalValue('');
+        
+        // Default employee if available
+        const sellers = employees.filter(e => ['vendedor', 'ambos', 'supervisor_ventas', 'supervisor_general'].includes(e.role));
+        if (sellers.length > 0 && !employeeId) {
+          setEmployeeId(sellers[0].id);
+        }
       }
 
       // Fetch existing clients for rapid selection
@@ -73,7 +86,7 @@ export function NewManualSaleModal({
       };
       fetchClients();
     }
-  }, [isOpen, currentEnterpriseId]);
+  }, [isOpen, currentEnterpriseId, initialSale]);
 
   if (!isOpen) return null;
 
@@ -100,7 +113,7 @@ export function NewManualSaleModal({
     try {
       setIsSubmitting(true);
 
-      const newSaleData = {
+      const saleData = {
         date,
         type,
         employeeId,
@@ -110,23 +123,30 @@ export function NewManualSaleModal({
         article: article.trim() || (isMoto ? `Moto ${motoType === 'combustion' ? 'Combustión' : 'Eléctrica'}` : 'Venta Externa'),
         totalValue: numericValue,
         enterpriseId: currentEnterpriseId,
-        createdAt: new Date().toISOString(),
         isManual: true, // Indica venta manual/externa para presupuesto
         note: 'Venta manual registrada desde Presupuestos (sin descuento de stock)'
       };
 
-      const docRef = await addDoc(collection(db, 'sales'), newSaleData);
+      if (initialSale) {
+        await updateDoc(doc(db, 'sales', initialSale.id), {
+          ...saleData,
+          updatedAt: new Date().toISOString()
+        });
+        await logAudit(AuditAction.SALE_UPDATE, `Venta manual/externa actualizada: ${initialSale.id}`, initialSale.id);
+        showToast('Venta manual actualizada exitosamente', 'success');
+      } else {
+        const docRef = await addDoc(collection(db, 'sales'), {
+          ...saleData,
+          createdAt: new Date().toISOString()
+        });
+        await logAudit(
+          AuditAction.SALE_CREATE,
+          `Venta manual/externa registrada. Cliente: ${clientName}, Monto: $${numericValue}`,
+          docRef.id
+        );
+        showToast('Venta manual registrada exitosamente', 'success');
+      }
 
-      const assignedEmp = employees.find(e => e.id === employeeId);
-      const sellerLabel = assignedEmp ? `${assignedEmp.name} ${assignedEmp.lastName}` : 'Vendedor';
-
-      await logAudit(
-        AuditAction.SALE_CREATE,
-        `Venta manual/externa registrada para ${sellerLabel}. Cliente: ${clientName}, Monto: $${numericValue}, ¿Moto?: ${isMoto ? 'Sí (' + motoType + ')' : 'No'}`,
-        docRef.id
-      );
-
-      showToast('Venta manual registrada exitosamente para el presupuesto', 'success');
       onSuccess();
       onClose();
     } catch (err: any) {

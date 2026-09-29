@@ -11,6 +11,51 @@ export interface ChangelogRelease {
 
 export const staticChangelog: ChangelogRelease[] = [
   {
+    version: "5.48.5",
+    date: "2026-09-28",
+    changes: [
+      "Corrección de compilación: Se solucionó el error de sintaxis en el registro de cambios (changelog.ts) que impedía el proceso de build."
+    ]
+  },
+  {
+    version: "5.48.4",
+    date: "2026-09-28",
+    changes: [
+      "Optimización de PDF: Ajuste de orientación a 'paisaje' (landscape), reducción de tamaño de fuente y márgenes en el reporte para garantizar que todas las columnas quepan en una sola hoja."
+    ]
+  },
+  {
+    version: "5.48.3",
+    date: "2026-09-28",
+    changes: [
+      "Implementación de Exportación en Reportes: Añadidos botones para descarga directa en formato PDF (vía jsPDF) y Excel (vía SheetJS/XLSX) dentro del modal de reportes detallados."
+    ]
+  },
+  {
+    version: "5.48.2",
+    date: "2026-09-28",
+    changes: [
+      "Optimización del Modal de Reportes: Corrección de layout con footer anclado para asegurar visibilidad del botón en cualquier tamaño de pantalla.",
+      "Carga Condicional de Reportes: El reporte ahora inicia oculto y solo se procesa/muestra tras activar la 'Vista Previa', mejorando la legibilidad inicial."
+    ]
+  },
+  {
+    version: "5.48.1",
+    date: "2026-09-28",
+    changes: [
+      "Reubicación del Módulo Empleados: Integrado nuevamente en el submenú de 'Comercio'.",
+      "Optimización del Modal de Reportes: Implementación de filtros múltiples (Vendedor, Cobrador, Tipo de Venta) y lógica para visualizar reportes en tablas separadas agrupadas por empleado."
+    ]
+  },
+  {
+    version: "5.48.0",
+    date: "2026-09-26",
+    changes: [
+      "Limpieza de UI en Modal de Clientes: Eliminación de bordes y recuadros en títulos de secciones para un diseño minimalista.",
+      "Unificación de Estilo: Aplicación de fondo gris claro en campos de entrada de los pasos 3 y 4 para mantener consistencia visual con los pasos 1 y 2."
+    ]
+  },
+  {
     version: "5.47.1",
     date: "2026-09-24",
     changes: [

@@ -535,7 +535,6 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                     <User className="w-4 h-4" />
                     Información Principal de Identificación y Contacto
                   </h3>
-                  <p className="text-[11px] text-neutral-500 mt-0.5">Ingrese la cédula o RUC e información domiciliaria primaria.</p>
                 </div>
               </div>
 
@@ -548,7 +547,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                   <select
                     value={clientType}
                     onChange={(e) => setClientType(e.target.value as ClientType)}
-                    className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-bold text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                    className="w-full px-3.5 py-2.5 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-bold text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
                   >
                     <option value="CREDITO">CRÉDITO (Requiere Expediente Buró)</option>
                     <option value="CONTADO">CONTADO (Venta Directa de Almacén)</option>
@@ -569,7 +568,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                       onChange={(e) => setIdCard(e.target.value.replace(/\D/g, ''))}
                       onBlur={handleIdCardBlur}
                       placeholder="Ej: 0102030405 o 0102030405001"
-                      className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-mono font-bold text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                      className="w-full px-3.5 py-2.5 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-mono font-bold text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
                       required
                     />
                     {idCard.length >= 10 && (
@@ -595,7 +594,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                     placeholder="Ej: Pérez Guartambel o Corporación ABC"
-                    className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                    className="w-full px-3.5 py-2.5 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
                     required
                   />
                 </div>
@@ -609,7 +608,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
                     placeholder="Ej: Juan Carlos"
-                    className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                    className="w-full px-3.5 py-2.5 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
                     required
                   />
                 </div>
@@ -625,7 +624,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="Ej: 0991234567"
-                    className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-mono font-bold text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                    className="w-full px-3.5 py-2.5 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-mono font-bold text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
                     required
                   />
                 </div>
@@ -639,7 +638,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
                     placeholder="Ej: Cuenca, Gualaceo..."
-                    className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                    className="w-full px-3.5 py-2.5 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
                     required
                   />
                 </div>
@@ -653,7 +652,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="ejemplo@correo.com"
-                    className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                    className="w-full px-3.5 py-2.5 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
                   />
                 </div>
               </div>
@@ -667,7 +666,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   placeholder="Ej: Av. Remigio Crespo y Sangurima N° 12-34 (Frente a la Farmacia)"
-                  className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                  className="w-full px-3.5 py-2.5 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
                   required
                 />
               </div>
@@ -695,7 +694,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                     <select
                       value={civilStatus}
                       onChange={(e) => setCivilStatus(e.target.value as CivilStatus)}
-                      className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-bold text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-bold text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
                     >
                       <option value="SOLTERO">Soltero(a)</option>
                       <option value="CASADO">Casado(a)</option>
@@ -712,7 +711,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                     <select
                       value={gender}
                       onChange={(e) => setGender(e.target.value as Gender)}
-                      className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-bold text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-bold text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
                     >
                       <option value="MASCULINO">Masculino</option>
                       <option value="FEMENINO">Femenino</option>
@@ -728,7 +727,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                       type="date"
                       value={birthDate}
                       onChange={(e) => setBirthDate(e.target.value)}
-                      className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-bold text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-bold text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
 
@@ -741,7 +740,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                       min={0}
                       value={dependentsCount}
                       onChange={(e) => setDependentsCount(Number(e.target.value))}
-                      className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-bold text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-bold text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
                 </div>
@@ -897,7 +896,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                       value={workplace}
                       onChange={(e) => setWorkplace(e.target.value)}
                       placeholder="Ej: Ministerio de Salud / Negocio Propio"
-                      className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-semibold text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
 
@@ -910,7 +909,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                       value={position}
                       onChange={(e) => setPosition(e.target.value)}
                       placeholder="Ej: Contador / Comerciante"
-                      className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
                 </div>
@@ -925,7 +924,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                       value={workPhone}
                       onChange={(e) => setWorkPhone(e.target.value)}
                       placeholder="Ej: 072834567"
-                      className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-mono font-bold text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs font-mono font-bold text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
 
@@ -938,7 +937,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                       value={workAddress}
                       onChange={(e) => setWorkAddress(e.target.value)}
                       placeholder="Ej: Calle Larga y Benigno Malo"
-                      className="w-full px-3 py-2 bg-neutral-50 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full px-3 py-2 bg-neutral-100 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 rounded-xl text-xs text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
                 </div>
@@ -960,7 +959,7 @@ export const ClientModal: React.FC<ClientModalProps> = ({
                       step={50}
                       value={creditLimit}
                       onChange={(e) => setCreditLimit(Number(e.target.value))}
-                      className="w-full pl-7 pr-3 py-1.5 bg-neutral-50 dark:bg-neutral-800 border border-emerald-300 dark:border-emerald-700 rounded-xl text-sm font-black text-emerald-700 dark:text-emerald-300 outline-none"
+                      className="w-full pl-7 pr-3 py-1.5 bg-neutral-100 dark:bg-neutral-800 border border-emerald-300 dark:border-emerald-700 rounded-xl text-sm font-black text-emerald-700 dark:text-emerald-300 outline-none"
                     />
                   </div>
                 </div>

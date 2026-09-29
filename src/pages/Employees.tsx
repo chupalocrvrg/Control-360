@@ -42,7 +42,9 @@ export default function Employees() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [isManualSaleModalOpen, setIsManualSaleModalOpen] = useState(false);
+  const [editingSale, setEditingSale] = useState<any | null>(null);
   const [isManualCollectionModalOpen, setIsManualCollectionModalOpen] = useState(false);
+  const [editingCollection, setEditingCollection] = useState<any | null>(null);
   
   // Real sales and collections data for comparison
   const [salesRecords, setSalesRecords] = useState<any[]>([]);
@@ -772,7 +774,7 @@ export default function Employees() {
                             key={s.id}
                             className="p-2 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200/60 dark:border-neutral-800 text-[11px] flex justify-between items-center"
                           >
-                            <div className="truncate pr-2">
+                            <div className="flex-1 truncate pr-2">
                               <p className="font-bold text-neutral-900 dark:text-white truncate">
                                 {s.clientName || 'Cliente sin nombre'}
                               </p>
@@ -780,13 +782,27 @@ export default function Employees() {
                                 {s.article} • {s.date}
                               </p>
                             </div>
-                            <div className="text-right whitespace-nowrap">
-                              <span className="font-bold text-neutral-900 dark:text-neutral-100">
-                                ${s.totalValue?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                              </span>
-                              <span className={`block text-[9px] font-bold uppercase ${s.type === 'credito' ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                                {s.type}
-                              </span>
+                            <div className="flex items-center gap-2">
+                              {s.isManual && (
+                                <button
+                                  onClick={() => {
+                                    setEditingSale(s);
+                                    setIsManualSaleModalOpen(true);
+                                  }}
+                                  className="p-1.5 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors"
+                                  title="Editar venta manual"
+                                >
+                                  <Pencil className="w-3 h-3" />
+                                </button>
+                              )}
+                              <div className="text-right whitespace-nowrap">
+                                <span className="font-bold text-neutral-900 dark:text-neutral-100">
+                                  ${s.totalValue?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                </span>
+                                <span className={`block text-[9px] font-bold uppercase ${s.type === 'credito' ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                  {s.type}
+                                </span>
+                              </div>
                             </div>
                           </div>
                         ))
@@ -926,7 +942,7 @@ export default function Employees() {
                                   className="p-2.5 rounded-lg bg-indigo-50/30 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/30 text-[11px]"
                                 >
                                   <div className="flex justify-between items-start mb-1">
-                                    <div className="pr-2">
+                                    <div className="flex-1 pr-2">
                                       <p className="font-black text-indigo-900 dark:text-indigo-300 uppercase tracking-tighter">
                                         {item.noReceipt ? 'COBRO EN AGENCIA' : `RECIBOS: ${item.initialReceipt} AL ${item.finalReceipt}`}
                                       </p>
@@ -935,13 +951,25 @@ export default function Employees() {
                                       </p>
                                       {item.clientName && <p className="text-[9px] text-neutral-400 mt-0.5">Cliente: {item.clientName}</p>}
                                     </div>
-                                    <div className="text-right">
-                                      <span className="font-black text-indigo-600 dark:text-indigo-400 text-xs">
-                                        ${item.totalCollected?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                      </span>
-                                      <div className="text-[9px] space-y-0.5 mt-1">
-                                        <p className="text-emerald-600">Ef: ${item.cashFinal?.toFixed(2)}</p>
-                                        <p className="text-blue-600">Tr: ${item.depositsTransfers?.toFixed(2)}</p>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        onClick={() => {
+                                          setEditingCollection(item);
+                                          setIsManualCollectionModalOpen(true);
+                                        }}
+                                        className="p-1.5 text-indigo-600 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 rounded-lg transition-colors"
+                                        title="Editar cobranza manual"
+                                      >
+                                        <Pencil className="w-3 h-3" />
+                                      </button>
+                                      <div className="text-right">
+                                        <span className="font-black text-indigo-600 dark:text-indigo-400 text-xs">
+                                          ${item.totalCollected?.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                        </span>
+                                        <div className="text-[9px] space-y-0.5 mt-1">
+                                          <p className="text-emerald-600">Ef: ${item.cashFinal?.toFixed(2)}</p>
+                                          <p className="text-blue-600">Tr: ${item.depositsTransfers?.toFixed(2)}</p>
+                                        </div>
                                       </div>
                                     </div>
                                   </div>
@@ -1067,24 +1095,32 @@ export default function Employees() {
       {/* Modal de Venta Manual / Externa para Presupuestos */}
       <NewManualSaleModal
         isOpen={isManualSaleModalOpen}
-        onClose={() => setIsManualSaleModalOpen(false)}
+        onClose={() => {
+          setIsManualSaleModalOpen(false);
+          setEditingSale(null);
+        }}
         employees={employees}
         currentMonth={currentMonth}
         onSuccess={() => {
           fetchBudgets();
-          showToast('Venta registrada exitosamente', 'success');
+          showToast(editingSale ? 'Venta actualizada exitosamente' : 'Venta registrada exitosamente', 'success');
         }}
+        initialSale={editingSale}
       />
       {/* Modal de Cobro a Presupuesto / Ruta Externa */}
       <ManualCollectionModal
         isOpen={isManualCollectionModalOpen}
-        onClose={() => setIsManualCollectionModalOpen(false)}
+        onClose={() => {
+          setIsManualCollectionModalOpen(false);
+          setEditingCollection(null);
+        }}
         employees={employees}
         defaultMonth={currentMonth}
         onSuccess={() => {
           fetchBudgets();
-          showToast('Cobranza a presupuesto registrada con éxito', 'success');
+          showToast(editingCollection ? 'Cobranza actualizada exitosamente' : 'Cobranza registrada exitosamente', 'success');
         }}
+        editingCollection={editingCollection}
       />
     </div>
   );

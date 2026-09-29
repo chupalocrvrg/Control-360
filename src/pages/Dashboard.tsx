@@ -28,6 +28,7 @@ import {
 import { logAudit, AuditAction } from '../lib/audit';
 import { Target, User, Store, Bike, Receipt } from 'lucide-react';
 import InventoryDashboard from '../components/inventory/InventoryDashboard';
+import { MonthlyGeneralReportModal } from '../components/MonthlyGeneralReportModal';
 import { 
   getMonthlyPortfolioCutoffs, 
   getCollectorPortfolioEvolution, 
@@ -1218,12 +1219,22 @@ const handleGenerateAdvancedReport = async (reportType: 'pdf' | 'excel' | 'previ
           </button>
           <button 
             onClick={() => setShowCustomReportModal(true)}
-            className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 dark:shadow-none"
+            className="px-5 py-2.5 text-sm font-bold bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all shadow-lg hover:shadow-indigo-500/20 active:scale-95"
           >
             Generar Reporte
           </button>
         </div>
       </header>
+      
+      {showCustomReportModal && (
+        <MonthlyGeneralReportModal
+          isOpen={showCustomReportModal}
+          onClose={() => setShowCustomReportModal(false)}
+          allSales={allSales}
+          allCollections={allCollections}
+          employees={allCommerceData.map(c => c.employee)}
+        />
+      )}
 
       {/* KPI Section */}
             <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
