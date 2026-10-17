@@ -277,6 +277,24 @@ service cloud.firestore {
       allow create, update: if isVerified() && isEnterpriseData(incoming());
     }
 
+    match /proformas/{id} {
+      allow read: if isVerified() && (resource == null || isEnterpriseData(resource.data));
+      allow delete: if isVerified() && resource != null && isEnterpriseData(resource.data);
+      allow create, update: if isVerified() && isEnterpriseData(incoming());
+    }
+
+    match /price_list_items/{id} {
+      allow read: if isVerified() && (resource == null || isEnterpriseData(resource.data));
+      allow delete: if isVerified() && resource != null && isEnterpriseData(resource.data);
+      allow create, update: if isVerified() && isEnterpriseData(incoming());
+    }
+
+    match /price_list_config/{id} {
+      allow read: if isVerified() && (resource == null || isEnterpriseData(resource.data));
+      allow delete: if isVerified() && resource != null && isEnterpriseData(resource.data);
+      allow create, update: if isVerified() && isEnterpriseData(incoming());
+    }
+
     match /checks/{id} {
       allow read: if isVerified() && (resource == null || isEnterpriseData(resource.data));
       allow delete: if isVerified() && resource != null && isEnterpriseData(resource.data);

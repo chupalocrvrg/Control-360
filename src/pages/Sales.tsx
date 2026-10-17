@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc, Timestamp, query, orderBy, where } from 'firebase/firestore';
-import { Plus, Pencil, Trash2, ShoppingCart, AlertCircle, Save, X, Calendar, User, DollarSign, Bike, FileText, BadgePercent, ShieldCheck, Coins, Receipt, ShoppingBag, Printer, UserPlus, Users } from 'lucide-react';
+import { Plus, Pencil, Trash2, ShoppingCart, AlertCircle, Save, X, Calendar, User, DollarSign, Bike, FileText, BadgePercent, ShieldCheck, Coins, Receipt, ShoppingBag, Printer, UserPlus, Users, FileSpreadsheet } from 'lucide-react';
 import SalesPredictiveSearch from '../components/sales/SalesPredictiveSearch';
 import { ClientManagementModal } from '../components/sales/ClientManagementModal';
 import { NewCreditSaleModal } from '../components/sales/NewCreditSaleModal';
@@ -12,6 +12,8 @@ import { CreditApplicationPrintModal, CreditApplicationPrintData } from '../comp
 import { DocumentPrintCenterModal } from '../components/sales/DocumentPrintCenterModal';
 import { RecordCreditPaymentModal } from '../components/sales/RecordCreditPaymentModal';
 import { CreditPaymentReceiptModal } from '../components/sales/CreditPaymentReceiptModal';
+import ProformaPriceListModal from '../components/sales/ProformaPriceListModal';
+import { Proforma } from '../types/proforma';
 import { executeCreditSaleTransaction, fetchInventoryCollection } from '../lib/inventory-db';
 import { CreditSale } from '../types/creditSale';
 import { CreditPayment } from '../types/creditPayment';
@@ -67,6 +69,7 @@ export default function Sales() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isInventoryCashSaleModalOpen, setIsInventoryCashSaleModalOpen] = useState(false);
   const [isManualSaleModalOpen, setIsManualSaleModalOpen] = useState(false);
+  const [isProformaModalOpen, setIsProformaModalOpen] = useState(false);
   const [editingSale, setEditingSale] = useState<Sale | null>(null);
 
   // Credit Sales Tramo 2 Modals and Data State
@@ -900,6 +903,14 @@ export default function Sales() {
               Clientes
             </button>
             <button
+              onClick={() => setIsProformaModalOpen(true)}
+              className="bg-purple-700 hover:bg-purple-800 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors shadow-sm cursor-pointer"
+              title="Módulo de Proformas y Cotizador inteligente con Lista de Precios Excel / Dropbox"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-purple-200" />
+              Cotizador / Proformas
+            </button>
+            <button
               onClick={() => setIsManualSaleModalOpen(true)}
               className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors shadow-sm cursor-pointer"
               title="Registrar venta manual / externa para cumplimiento presupuestario sin descontar stock de bodega"
@@ -1356,6 +1367,20 @@ export default function Sales() {
         onClose={() => setIsClientModalOpen(false)}
         onSave={handleSaveClient}
         clients={clients}
+      />
+
+      {/* Modal de Proformas y Lista de Precios Dropbox / Excel */}
+      <ProformaPriceListModal
+        isOpen={isProformaModalOpen}
+        onClose={() => setIsProformaModalOpen(false)}
+        clients={clients}
+        employees={employees}
+        enterpriseId={currentEnterpriseId}
+        enterpriseName={
+          enterprises.find(e => e.id === currentEnterpriseId)?.name ||
+          profile?.name ||
+          'Comercial 360'
+        }
       />
     
     </div>

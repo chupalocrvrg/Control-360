@@ -11,6 +11,42 @@ export interface ChangelogRelease {
 
 export const staticChangelog: ChangelogRelease[] = [
   {
+    version: "5.53.0",
+    date: "2026-10-17",
+    changes: [
+      "Nueva Funcionalidad 'Activar Proforma Combo': Permite cotizar múltiples artículos con plazos crediticios distintos (ej. 10 meses y 12 meses) unificándolos automáticamente en un solo plan consolidado adaptado al plazo mayor.",
+      "Adaptación Dinámica de Cuotas en Combo: Los artículos con menor tiempo disponible recalculan su cuota mensual al plazo mayor unificado, reduciendo el valor mensual de forma armónica y proporcional.",
+      "Cuota Inicial / Entrada Unificada: Campo centralizado para consolidar y personalizar la entrada inicial total del combo, recalculando en tiempo real el saldo a financiar y la cuota mensual única.",
+      "Sincronización Total de Pagos y Fechas: Unifica el cronograma de vencimientos en un solo pago recurrente mensual para el cliente, eliminando fechas dispersas o cobros divididos.",
+      "Formato Corporativo Combo en Vista Previa, PDF y WhatsApp: La proforma impresa, descargada en PDF y compartida por WhatsApp resalta de forma destacada el resumen del Plan Combo Unificado, ocultando el precio piso interno y presentando la cuota y entrada consolidadas.",
+      "Trazabilidad en Historial: Registro en Firestore con distintivo visual '🔥 Combo' y plazo unificado en la tabla de cotizaciones para seguimiento comercial inmediato."
+    ]
+  },
+  {
+    version: "5.52.0",
+    date: "2026-10-15",
+    changes: [
+      "Restricción Estricta de Plazos de Crédito: Eliminación total de plazos no autorizados (como 12 meses forzados en artículos con tope de 10 u 8 meses); ahora el sistema solo genera y muestra plazos estrictamente menores o iguales a la columna 'MESES' (Plazo Máximo).",
+      "Protección de Precio Mínimo / Piso Vendedor Oculto: El valor de contado mínimo de almacén ya no se exhibe al cliente en la proforma impresa ni en el mensaje de WhatsApp. En su lugar, se codifica de forma interna e inteligente en la referencia del producto (ej. 'TV65IN695QLED'), permitiendo al vendedor identificar el piso sin revelar su costo.",
+      "Retorno Inmediato desde la Vista Previa: Incorporación de botones prioritarios '← Regresar a la Proforma (Seguir Editando)' tanto en la barra superior como en el pie del documento, atajo con tecla ESC y cierre por clic externo, preservando intacto el 100% del borrador de artículos y datos del cliente.",
+      "Impresión de Alta Fidelidad y Descarga en PDF: Integración con motor de impresión en iframe aislado ('printElement') y descarga directa de proformas en PDF ('downloadElementAsPdf'), garantizando que el documento siempre se genere y se imprima con formato corporativo impecable.",
+      "Edición Directa de Artículos en la Proforma: Nueva funcionalidad para modificar en línea el plazo, la entrada personalizada y la cantidad de cualquier artículo ya agregado a la proforma, recalculando al instante la cuota mensual.",
+      "Flujo Automatizado al Guardar Proforma: Al registrar la proforma oficial, el cotizador se limpia de forma automática y el sistema traslada al usuario directamente a la pestaña 'Historial de Proformas'."
+    ]
+  },
+  {
+    version: "5.51.0",
+    date: "2026-10-07",
+    changes: [
+      "Nuevo Módulo de Proformas y Cotizador Comercial Inteligente: Incorporación de cotizador comercial avanzado integrado directamente con listas de precios en formato Excel y Dropbox.",
+      "Sincronización en Tiempo Real con Dropbox: Capacidad de conectar un enlace compartido de Dropbox (.xlsx) con proxy backend para descarga segura, procesamiento de encabezados y actualización del catálogo.",
+      "Carga y Detección Dinámica de Plazos de Crédito: Lectura automática de plazos personalizados por artículo (3, 6, 12 meses y columna MESES para plazos máximos como 10, 15, 20, 24, 28 meses), mostrando al asesor únicamente los plazos válidos para cada producto.",
+      "Recálculo Dinámico de Entradas y Cuotas en Vivo: Al modificar la entrada del cliente, el sistema calcula de inmediato la nueva cuota mediante la fórmula '(Precio Total Crédito - Entrada) / Meses'.",
+      "Formatos Oficiales de Impresión y Compartición por WhatsApp: Generación de proformas corporativas imprimibles con validez comercial y mensajes preformateados para envío directo por WhatsApp con un solo clic.",
+      "Historial de Cotizaciones y Seguridad en Firestore: Registro y seguimiento de estados de proformas (Cotizada, Aceptada, Rechazada, Vendida) con reglas de seguridad específicas."
+    ]
+  },
+  {
     version: "5.50.2",
     date: "2026-09-29",
     changes: [
