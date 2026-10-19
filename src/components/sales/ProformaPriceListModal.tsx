@@ -139,6 +139,7 @@ export default function ProformaPriceListModal({
   const [isComboActive, setIsComboActive] = useState<boolean>(false);
   const [comboTargetMonths, setComboTargetMonths] = useState<number>(12);
   const [comboCustomDownPayment, setComboCustomDownPayment] = useState<number | null>(null);
+  const [extraValue, setExtraValue] = useState<number>(0);
 
   // Saved Proformas History
   const [savedProformas, setSavedProformas] = useState<Proforma[]>([]);
@@ -313,6 +314,15 @@ export default function ProformaPriceListModal({
     }
   };
 
+  const itemsWithExtra = useMemo(() => {
+    const totalItems = proformaItems.reduce((acc, it) => acc + it.quantity, 0);
+    const extraPerItem = totalItems > 0 ? extraValue / totalItems : 0;
+    return proformaItems.map(it => ({
+      ...it,
+      totalCreditPrice: it.totalCreditPrice + extraPerItem
+    }));
+  }, [proformaItems, extraValue]);
+
   // Calculate overall totals
   const proformaTotals = useMemo(() => {
     let totalCash = 0;
@@ -320,7 +330,7 @@ export default function ProformaPriceListModal({
     let totalDownPayment = 0;
     let totalMonthlyQuotas = 0;
 
-    proformaItems.forEach(it => {
+    itemsWithExtra.forEach(it => {
       totalCash += (it.minStorePrice || 0) * it.quantity;
       totalCredit += (it.totalCreditPrice || 0) * it.quantity;
       totalDownPayment += (it.downPayment || 0) * it.quantity;
@@ -374,16 +384,16 @@ export default function ProformaPriceListModal({
     if (!isComboActive || proformaItems.length < 2) return null;
     const defaultSum = proformaItems.reduce((acc, it) => acc + (it.downPayment * it.quantity), 0);
     const activeDownPayment = comboCustomDownPayment !== null ? comboCustomDownPayment : defaultSum;
-    return calculateComboAdaptation(proformaItems, comboTargetMonths, activeDownPayment);
-  }, [isComboActive, proformaItems, comboTargetMonths, comboCustomDownPayment]);
+    return calculateComboAdaptation(itemsWithExtra, comboTargetMonths, activeDownPayment);
+  }, [isComboActive, itemsWithExtra, comboTargetMonths, comboCustomDownPayment]);
 
   // Active items and totals for current view, preview and proforma generation
   const activeProformaItems = useMemo(() => {
     if (isComboActive && comboCalculation && proformaItems.length >= 2) {
       return comboCalculation.adaptedItems;
     }
-    return proformaItems;
-  }, [isComboActive, comboCalculation, proformaItems]);
+    return itemsWithExtra;
+  }, [isComboActive, comboCalculation, itemsWithExtra]);
 
   const activeTotals = useMemo(() => {
     if (isComboActive && comboCalculation && proformaItems.length >= 2) {
@@ -538,6 +548,7 @@ export default function ProformaPriceListModal({
       comboMonths: isCombo ? comboTargetMonths : undefined,
       comboDownPayment: isCombo ? activeTotals.totalDownPayment : undefined,
       comboMonthlyQuota: isCombo ? activeTotals.totalMonthlyQuotas : undefined,
+      extraValue: extraValue,
       status: 'COTIZADA',
       notes: proformaNotes
     };
@@ -570,6 +581,7 @@ export default function ProformaPriceListModal({
       setEditingCartItemIndex(null);
       setIsComboActive(false);
       setComboCustomDownPayment(null);
+      setExtraValue(0);
 
       // 2. Pasar automáticamente a la pestaña Historial de Proformas
       setActiveTab('historial');
@@ -661,7 +673,11 @@ export default function ProformaPriceListModal({
       msg += `💵 *Entrada Total Unificada:* *$${prof.totalDownPayment.toFixed(2)}*\n`;
       msg += `🗓️ *CUOTA MENSUAL ÚNICA: $${(prof.comboMonthlyQuota || (prof.totalFinanced / (prof.comboMonths || 12))).toFixed(2)} / mes*\n`;
       msg += `💰 *Total a Crédito:* $${prof.totalCredit.toFixed(2)}\n`;
-      msg += `💳 *Saldo Total a Financiar:* $${prof.totalFinanced.toFixed(2)}\n\n`;
+      msg += `💳 *Saldo Total a Financiar:* $${prof.totalFinanced.toFixed(2)}\n`;
+      if (prof.extraValue && prof.extraValue > 0) {
+        msg += `🚛 *Recargo por Logística/Ruta:* $${prof.extraValue.toFixed(2)}\n`;
+      }
+      msg += `\n`;
       msg += `📌 *Ventaja Combo:* Pagos y fechas sincronizados en un solo valor mensual con fecha fija de pago.\n\n`;
       msg += `¡Gracias por preferirnos! Si deseas separar tu combo o verificar la aprobación inmediata de tu crédito, contáctanos.`;
     } else {
@@ -1309,7 +1325,7 @@ export default function ProformaPriceListModal({
                       {/* Active Combo Controls */}
                       {isComboActive && (
                         <div className="mt-4 pt-3 border-t border-amber-200 dark:border-amber-900/60 space-y-3 animate-in fade-in duration-150">
-                          <div className="grid grid-cols-2 gap-3 text-xs">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                             <div>
                               <label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-300 block mb-1 uppercase">
                                 Plazo Unificado (Meses)
@@ -1323,7 +1339,7 @@ export default function ProformaPriceListModal({
                                   .filter(m => m >= minTermInItems || m === maxTermInItems)
                                   .map(m => (
                                     <option key={m} value={m}>
-                                      {m} meses {m === maxTermInItems ? '(Mayor plazo detectado)' : ''}
+                                      {m} meses {m === maxTermInItems ? '(Máximo)' : ''}
                                     </option>
                                   ))}
                               </select>
@@ -1332,16 +1348,15 @@ export default function ProformaPriceListModal({
                             <div>
                               <div className="flex justify-between items-center mb-1">
                                 <label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-300 uppercase">
-                                  Entrada Total Unificada ($)
+                                  Entrada Total ($)
                                 </label>
                                 {comboCustomDownPayment !== null && (
                                   <button
                                     type="button"
                                     onClick={() => setComboCustomDownPayment(null)}
                                     className="text-[9px] text-indigo-600 dark:text-indigo-400 hover:underline font-bold cursor-pointer"
-                                    title="Restablecer a la suma de entradas individuales"
                                   >
-                                    Restablecer
+                                    Reset
                                   </button>
                                 )}
                               </div>
@@ -1350,13 +1365,11 @@ export default function ProformaPriceListModal({
                                 min="0"
                                 step="5"
                                 value={comboCustomDownPayment !== null ? comboCustomDownPayment : proformaTotals.totalDownPayment}
-                                onChange={(e) => {
-                                  const val = e.target.value === '' ? 0 : Math.max(0, parseFloat(e.target.value) || 0);
-                                  setComboCustomDownPayment(val);
-                                }}
+                                onChange={(e) => setComboCustomDownPayment(Math.max(0, parseFloat(e.target.value) || 0))}
                                 className="w-full bg-white dark:bg-neutral-900 border border-amber-300 dark:border-amber-700 rounded-xl p-2 text-xs font-black text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-amber-500"
                               />
                             </div>
+
                           </div>
 
                           {/* Live Combo Results Box */}
@@ -1552,6 +1565,27 @@ export default function ProformaPriceListModal({
                           )}
                         </div>
                       ))}
+                    </div>
+                  )}
+
+                  {/* Valor Adicional Global (Siempre visible si hay items) */}
+                  {proformaItems.length > 0 && (
+                    <div className="p-3 bg-neutral-50 dark:bg-neutral-800/50 border border-neutral-200 dark:border-neutral-700 rounded-2xl mb-4">
+                      <label className="text-[10px] font-black uppercase text-neutral-500 dark:text-neutral-400 ml-1 block mb-1">
+                        Valor Adicional (Rutas/Gtos)
+                      </label>
+                      <div className="relative">
+                        <Plus className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-400" />
+                        <input
+                          type="number"
+                          min="0"
+                          step="5"
+                          value={extraValue}
+                          onChange={(e) => setExtraValue(Math.max(0, parseFloat(e.target.value) || 0))}
+                          className="w-full bg-white dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-600 rounded-xl p-2 pl-8 text-xs font-black text-neutral-900 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                          placeholder="0.00"
+                        />
+                      </div>
                     </div>
                   )}
 

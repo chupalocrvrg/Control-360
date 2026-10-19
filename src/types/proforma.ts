@@ -65,6 +65,7 @@ export interface Proforma {
   comboMonths?: number;       // Plazo unificado de meses del combo (ej. 12 meses)
   comboDownPayment?: number;  // Entrada inicial unificada del combo
   comboMonthlyQuota?: number; // Cuota mensual consolidada única del combo
+  extraValue?: number;        // Valor adicional global (ej. recargo por transporte/ruta lejana)
   status: 'COTIZADA' | 'ACEPTADA' | 'RECHAZADA' | 'VENDIDA' | 'VENCIDA';
   notes?: string;
   createdAt?: any;

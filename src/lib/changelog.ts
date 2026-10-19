@@ -11,6 +11,25 @@ export interface ChangelogRelease {
 
 export const staticChangelog: ChangelogRelease[] = [
   {
+    version: "5.55.0",
+    date: "2026-10-19",
+    changes: [
+      "Generalización del Campo 'Valor Adicional': Ahora la opción para agregar gastos adicionales (transporte, recargos) está disponible en todas las proformas, no solo en el modo Combo.",
+      "Distribución Equitativa: El valor adicional se distribuye proporcionalmente entre la cantidad total de artículos de la proforma, impactando correctamente el precio total a crédito y el cálculo de la cuota mensual para cualquier tipo de cotización."
+    ]
+  },
+  {
+    version: "5.54.0",
+    date: "2026-10-19",
+    changes: [
+      "Nuevo Campo 'Valor Adicional' en Proforma Combo: Permite agregar montos adicionales (ej. gastos de transporte o rutas lejanas) de forma global, dividiéndolos equitativamente entre los artículos del combo y sumándolos al valor financiado.",
+      "Sistema Robusto de Guardado en la Nube: Implementación de manejador de errores detallado (FirestoreErrorInfo) para diagnosticar y prevenir fallos en el despliegue a producción.",
+      "Optimización de Vista Previa y Edición: Se ha mejorado la visibilidad de los botones de retorno al cotizador desde la vista previa, garantizando que el usuario pueda seguir añadiendo o editando artículos sin perder datos.",
+      "Mejoras en el Motor de Impresión: Ajustes en el renderizado de documentos impresos para mayor compatibilidad con navegadores y dispositivos móviles.",
+      "Limpieza Automática del Cotizador Post-Guardado: El sistema ahora limpia todos los campos y artículos del cotizador inmediatamente después de guardar exitosamente una proforma, redirigiendo al historial automáticamente."
+    ]
+  },
+  {
     version: "5.53.0",
     date: "2026-10-17",
     changes: [

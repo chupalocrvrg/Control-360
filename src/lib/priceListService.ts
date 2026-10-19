@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import { 
   collection, 
   getDocs, 
@@ -160,6 +160,57 @@ export function calculateComboAdaptation(
     totalFinanced,
     comboMonthlyQuota
   };
+}
+
+// =================================================================
+// FIRESTORE ERROR HANDLING (AS PER SKILL)
+// =================================================================
+
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: any, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
 }
 
 /**
@@ -500,18 +551,8 @@ export async function loadPriceList(enterpriseId: string): Promise<PriceListItem
       } catch {}
       return items;
     }
-
-    // Try localStorage cache
-    const cached = localStorage.getItem(`${LOCAL_STORAGE_PRICE_LIST_KEY}_${enterpriseId}`);
-    if (cached) {
-      return JSON.parse(cached);
-    }
   } catch (err) {
-    console.warn('Could not load price list from Firestore, falling back to local cache/sample:', err);
-    try {
-      const cached = localStorage.getItem(`${LOCAL_STORAGE_PRICE_LIST_KEY}_${enterpriseId}`);
-      if (cached) return JSON.parse(cached);
-    } catch {}
+    handleFirestoreError(err, OperationType.GET, 'price_list_items');
   }
 
   // Fallback to sample items for immediate interactive experience
@@ -552,8 +593,7 @@ export async function savePriceList(enterpriseId: string, items: PriceListItem[]
       );
     }
   } catch (err) {
-    console.error('Error saving price list to Firestore:', err);
-    // Non-blocking since local cache is already saved
+    handleFirestoreError(err, OperationType.WRITE, 'price_list_items');
   }
 }
 
@@ -606,12 +646,17 @@ export async function savePriceListConfig(enterpriseId: string, config: PriceLis
  * Save a new Proforma to Firestore
  */
 export async function saveProforma(proformaData: Omit<Proforma, 'id'>): Promise<string> {
-  const docRef = await addDoc(collection(db, 'proformas'), {
-    ...proformaData,
-    createdAt: Timestamp.now(),
-    updatedAt: Timestamp.now()
-  });
-  return docRef.id;
+  try {
+    const docRef = await addDoc(collection(db, 'proformas'), {
+      ...proformaData,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
+    });
+    return docRef.id;
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, 'proformas');
+    return ''; // unreachable due to throw
+  }
 }
 
 /**
