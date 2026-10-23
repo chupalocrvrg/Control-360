@@ -597,12 +597,14 @@ async function startServer() {
       }
 
       let targetUrl = dropboxUrl.trim();
-      // Transform Dropbox link to direct download
+      // Transform Dropbox link to direct raw download
       if (targetUrl.includes("dropbox.com")) {
         if (targetUrl.includes("dl=0")) {
-          targetUrl = targetUrl.replace(/([?&])dl=0/, "$1dl=1");
-        } else if (!targetUrl.includes("dl=1")) {
-          targetUrl += targetUrl.includes("?") ? "&dl=1" : "?dl=1";
+          targetUrl = targetUrl.replace(/([?&])dl=0/, "$1raw=1");
+        } else if (targetUrl.includes("dl=1")) {
+          targetUrl = targetUrl.replace(/([?&])dl=1/, "$1raw=1");
+        } else if (!targetUrl.includes("raw=1")) {
+          targetUrl += targetUrl.includes("?") ? "&raw=1" : "?raw=1";
         }
       }
 
@@ -628,6 +630,15 @@ async function startServer() {
         return res.status(400).json({
           success: false,
           error: "El archivo descargado está vacío o no es un archivo Excel válido."
+        });
+      }
+
+      // Detect HTML response pages (e.g. login/preview pages instead of raw file)
+      const sampleHead = buffer.toString("utf-8", 0, 500);
+      if (sampleHead.includes("<!DOCTYPE") || sampleHead.includes("<html") || sampleHead.includes("Dropbox - ")) {
+        return res.status(400).json({
+          success: false,
+          error: "El enlace de Dropbox retornó una página web en lugar del archivo Excel (.xlsx). Asegúrese de compartir un enlace directo público a un archivo."
         });
       }
 

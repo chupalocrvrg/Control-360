@@ -11,6 +11,14 @@ export interface ChangelogRelease {
 
 export const staticChangelog: ChangelogRelease[] = [
   {
+    version: "5.55.1",
+    date: "2026-10-22",
+    changes: [
+      "Corrección de Sincronización con Dropbox: Prevención de errores 'Unexpected end of JSON input' durante la descarga de listas de precios en producción.",
+      "Manejo Seguro de Respuestas e Integración Híbrida: Sincronización robusta con respaldo cliente-servidor, conversión automática a descarga directa ('raw=1') y validación de archivos Excel."
+    ]
+  },
+  {
     version: "5.55.0",
     date: "2026-10-19",
     changes: [

@@ -429,7 +429,7 @@ export default function ProformaPriceListModal({
     setClientSearch('');
   };
 
-  // Sync with Dropbox via backend endpoint
+  // Sync with Dropbox via backend endpoint with client-side direct fallback
   const handleSyncDropbox = async () => {
     if (!dropboxUrlInput.trim()) {
       showToast('Por favor ingrese el enlace de Dropbox del archivo Excel.', 'warning');
@@ -437,23 +437,75 @@ export default function ProformaPriceListModal({
     }
 
     setIsSyncing(true);
+    let syncedItems: PriceListItem[] = [];
+
     try {
-      const response = await fetch('/api/price-list/sync-dropbox', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          dropboxUrl: dropboxUrlInput.trim(),
-          enterpriseId
-        })
-      });
+      let backendSuccess = false;
 
-      const data = await response.json();
+      // 1. Primary Attempt: Call backend endpoint /api/price-list/sync-dropbox
+      try {
+        const response = await fetch('/api/price-list/sync-dropbox', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dropboxUrl: dropboxUrlInput.trim(),
+            enterpriseId
+          })
+        });
 
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Error al sincronizar con Dropbox');
+        const rawText = await response.text();
+        if (rawText && rawText.trim().startsWith('{')) {
+          const data = JSON.parse(rawText);
+          if (response.ok && data.success && Array.isArray(data.items) && data.items.length > 0) {
+            syncedItems = data.items;
+            backendSuccess = true;
+          } else if (data.error) {
+            console.warn('Backend sync returned error:', data.error);
+          }
+        }
+      } catch (backendErr) {
+        console.warn('Backend endpoint fetch error, proceeding to client-side direct download:', backendErr);
       }
 
-      const syncedItems: PriceListItem[] = data.items;
+      // 2. Secondary Fallback Attempt: Direct client-side fetch from Dropbox
+      if (!backendSuccess) {
+        let cleanUrl = dropboxUrlInput.trim();
+        if (cleanUrl.includes('dropbox.com')) {
+          if (cleanUrl.includes('dl=0')) {
+            cleanUrl = cleanUrl.replace(/([?&])dl=0/, '$1raw=1');
+          } else if (cleanUrl.includes('dl=1')) {
+            cleanUrl = cleanUrl.replace(/([?&])dl=1/, '$1raw=1');
+          } else if (!cleanUrl.includes('raw=1')) {
+            cleanUrl += cleanUrl.includes('?') ? '&raw=1' : '?raw=1';
+          }
+        }
+
+        console.log('[Client Dropbox Sync] Fetching direct from Dropbox URL:', cleanUrl);
+        const clientRes = await fetch(cleanUrl, { redirect: 'follow' });
+        
+        if (!clientRes.ok) {
+          throw new Error(`No se pudo descargar el archivo de Dropbox (Código ${clientRes.status}). Asegúrese de que el enlace sea público.`);
+        }
+
+        const buffer = await clientRes.arrayBuffer();
+        if (buffer.byteLength < 100) {
+          throw new Error('El archivo descargado está vacío o no es un archivo Excel válido.');
+        }
+
+        // Check if response is HTML instead of Excel
+        const textDecoder = new TextDecoder('utf-8');
+        const sampleText = textDecoder.decode(buffer.slice(0, 500));
+        if (sampleText.includes('<!DOCTYPE') || sampleText.includes('<html') || sampleText.includes('Dropbox - ')) {
+          throw new Error('El enlace de Dropbox retornó una página web en lugar del archivo Excel (.xlsx). Asegúrese de usar un enlace de descarga directa pública.');
+        }
+
+        syncedItems = parseExcelBufferToPriceList(buffer, enterpriseId);
+        if (syncedItems.length === 0) {
+          throw new Error('No se encontraron artículos válidos en la hoja de cálculo de Dropbox.');
+        }
+      }
+
+      // 3. Save results to state and local/Firestore persistence
       setCatalog(syncedItems);
 
       const newConfig: PriceListConfig = {
