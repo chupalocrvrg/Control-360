@@ -11,6 +11,23 @@ export interface ChangelogRelease {
 
 export const staticChangelog: ChangelogRelease[] = [
   {
+    version: "5.55.3",
+    date: "2026-10-23",
+    changes: [
+      "Ajuste Crítico de Puerto del Servidor: Fijación estricta del puerto 3000 en el servidor de desarrollo, resolviendo el problema de inicio del dev server en el entorno.",
+      "Estabilidad en Sincronización y Despliegue: Verificación y aseguramiento del endpoint '/api/price-list/sync-dropbox' tanto en local como en producción."
+    ]
+  },
+  {
+    version: "5.55.2",
+    date: "2026-10-23",
+    changes: [
+      "Solución al Error 'Failed to Fetch' en Despliegue: Eliminación de peticiones directas desde el navegador a Dropbox que eran bloqueadas por políticas de CORS.",
+      "Compatibilidad de Despliegue Multi-Plataforma: Implementación de función serverless '/api/price-list/sync-dropbox' para Vercel y soporte dinámico de 'process.env.PORT' para Cloud Run y Docker.",
+      "Descarga Directa Asistida: Nuevo botón directo para abrir y descargar la lista de precios desde Dropbox al dispositivo móvil o PC con carga local instantánea."
+    ]
+  },
+  {
     version: "5.55.1",
     date: "2026-10-22",
     changes: [

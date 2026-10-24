@@ -75,6 +75,7 @@ const getResendClient = (): Resend | null => {
 import { generateReportHtml } from "./src/server/services/emailTemplates";
 import * as XLSX from "xlsx";
 import { parseRawRowsToPriceList } from "./src/lib/priceListService";
+import { syncDropboxExcel } from "./src/lib/dropboxSyncService";
 
 // Helper to verify admin permissions via Firebase Admin ID Token
 async function verifyAdminAuth(req: express.Request): Promise<{ uid: string; email: string } | null> {
@@ -589,95 +590,28 @@ async function startServer() {
   app.post("/api/price-list/sync-dropbox", express.json(), async (req, res) => {
     try {
       const { dropboxUrl, enterpriseId } = req.body;
-      if (!dropboxUrl || typeof dropboxUrl !== "string") {
-        return res.status(400).json({ 
-          success: false, 
-          error: "Falta el enlace de Dropbox ('dropboxUrl')." 
-        });
+      const result = await syncDropboxExcel(dropboxUrl, enterpriseId);
+      if (!result.success) {
+        return res.status(400).json(result);
       }
-
-      let targetUrl = dropboxUrl.trim();
-      // Transform Dropbox link to direct raw download
-      if (targetUrl.includes("dropbox.com")) {
-        if (targetUrl.includes("dl=0")) {
-          targetUrl = targetUrl.replace(/([?&])dl=0/, "$1raw=1");
-        } else if (targetUrl.includes("dl=1")) {
-          targetUrl = targetUrl.replace(/([?&])dl=1/, "$1raw=1");
-        } else if (!targetUrl.includes("raw=1")) {
-          targetUrl += targetUrl.includes("?") ? "&raw=1" : "?raw=1";
-        }
-      }
-
-      console.log(`[Dropbox Sync] Fetching price list Excel from: ${targetUrl}`);
-      const response = await fetch(targetUrl, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        },
-        redirect: "follow"
-      });
-
-      if (!response.ok) {
-        return res.status(400).json({
-          success: false,
-          error: `No se pudo descargar el archivo de Dropbox (Código HTTP ${response.status}: ${response.statusText}). Asegúrese de que el enlace sea accesible y público para lectura.`
-        });
-      }
-
-      const arrayBuffer = await response.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-
-      if (buffer.length < 100) {
-        return res.status(400).json({
-          success: false,
-          error: "El archivo descargado está vacío o no es un archivo Excel válido."
-        });
-      }
-
-      // Detect HTML response pages (e.g. login/preview pages instead of raw file)
-      const sampleHead = buffer.toString("utf-8", 0, 500);
-      if (sampleHead.includes("<!DOCTYPE") || sampleHead.includes("<html") || sampleHead.includes("Dropbox - ")) {
-        return res.status(400).json({
-          success: false,
-          error: "El enlace de Dropbox retornó una página web en lugar del archivo Excel (.xlsx). Asegúrese de compartir un enlace directo público a un archivo."
-        });
-      }
-
-      const workbook = XLSX.read(buffer, { type: "buffer" });
-      const sheetName = workbook.SheetNames[0];
-      if (!sheetName) {
-        return res.status(400).json({
-          success: false,
-          error: "El archivo Excel no contiene hojas de cálculo visibles."
-        });
-      }
-
-      const worksheet = workbook.Sheets[sheetName];
-      const rawRows: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
-
-      if (rawRows.length === 0) {
-        return res.status(400).json({
-          success: false,
-          error: "La hoja de cálculo está vacía o no contiene filas de datos."
-        });
-      }
-
-      const items = parseRawRowsToPriceList(rawRows, enterpriseId);
-
-      return res.status(200).json({
-        success: true,
-        sheetName,
-        count: items.length,
-        items,
-        syncDate: new Date().toISOString()
-      });
+      return res.status(200).json(result);
     } catch (err: any) {
-      console.error("Error synchronizing Dropbox price list:", err);
+      console.error("Error in /api/price-list/sync-dropbox:", err);
       return res.status(500).json({
         success: false,
         error: "Error interno al procesar el archivo Excel de Dropbox",
         details: err.message
       });
     }
+  });
+
+  app.get("/api/price-list/sync-dropbox", (req, res) => {
+    res.json({
+      status: "online",
+      endpoint: "/api/price-list/sync-dropbox",
+      method: "POST",
+      description: "Servicio de sincronización de listas de precios desde Dropbox activo."
+    });
   });
 
   // Service Routing

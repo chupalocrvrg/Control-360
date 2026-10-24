@@ -112,6 +112,19 @@ export default function ProformaPriceListModal({
   const [isSyncing, setIsSyncing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const directDropboxDownloadUrl = useMemo(() => {
+    if (!dropboxUrlInput.trim()) return '';
+    const trimmed = dropboxUrlInput.trim();
+    if (trimmed.includes('dropbox.com')) {
+      return trimmed
+        .replace('www.dropbox.com', 'dl.dropboxusercontent.com')
+        .replace('dropbox.com', 'dl.dropboxusercontent.com')
+        .replace(/([?&])dl=[01]/, '')
+        .replace(/([?&])raw=1/, '');
+    }
+    return trimmed;
+  }, [dropboxUrlInput]);
+
   // Search state in cotizador
   const [productSearch, setProductSearch] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<PriceListItem | null>(null);
@@ -429,7 +442,7 @@ export default function ProformaPriceListModal({
     setClientSearch('');
   };
 
-  // Sync with Dropbox via backend endpoint with client-side direct fallback
+  // Sync with Dropbox via backend endpoint
   const handleSyncDropbox = async () => {
     if (!dropboxUrlInput.trim()) {
       showToast('Por favor ingrese el enlace de Dropbox del archivo Excel.', 'warning');
@@ -437,14 +450,11 @@ export default function ProformaPriceListModal({
     }
 
     setIsSyncing(true);
-    let syncedItems: PriceListItem[] = [];
 
     try {
-      let backendSuccess = false;
-
-      // 1. Primary Attempt: Call backend endpoint /api/price-list/sync-dropbox
+      let response: Response;
       try {
-        const response = await fetch('/api/price-list/sync-dropbox', {
+        response = await fetch('/api/price-list/sync-dropbox', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -452,60 +462,35 @@ export default function ProformaPriceListModal({
             enterpriseId
           })
         });
-
-        const rawText = await response.text();
-        if (rawText && rawText.trim().startsWith('{')) {
-          const data = JSON.parse(rawText);
-          if (response.ok && data.success && Array.isArray(data.items) && data.items.length > 0) {
-            syncedItems = data.items;
-            backendSuccess = true;
-          } else if (data.error) {
-            console.warn('Backend sync returned error:', data.error);
-          }
-        }
-      } catch (backendErr) {
-        console.warn('Backend endpoint fetch error, proceeding to client-side direct download:', backendErr);
+      } catch (networkErr: any) {
+        console.error('Network error calling /api/price-list/sync-dropbox:', networkErr);
+        throw new Error(
+          'No se pudo conectar con el servicio backend de sincronización. ' +
+          'Si su despliegue es estático o sin servidor activo, puede descargar el archivo y usar el botón "Subir archivo Excel local (.xlsx)".'
+        );
       }
 
-      // 2. Secondary Fallback Attempt: Direct client-side fetch from Dropbox
-      if (!backendSuccess) {
-        let cleanUrl = dropboxUrlInput.trim();
-        if (cleanUrl.includes('dropbox.com')) {
-          if (cleanUrl.includes('dl=0')) {
-            cleanUrl = cleanUrl.replace(/([?&])dl=0/, '$1raw=1');
-          } else if (cleanUrl.includes('dl=1')) {
-            cleanUrl = cleanUrl.replace(/([?&])dl=1/, '$1raw=1');
-          } else if (!cleanUrl.includes('raw=1')) {
-            cleanUrl += cleanUrl.includes('?') ? '&raw=1' : '?raw=1';
-          }
-        }
-
-        console.log('[Client Dropbox Sync] Fetching direct from Dropbox URL:', cleanUrl);
-        const clientRes = await fetch(cleanUrl, { redirect: 'follow' });
-        
-        if (!clientRes.ok) {
-          throw new Error(`No se pudo descargar el archivo de Dropbox (Código ${clientRes.status}). Asegúrese de que el enlace sea público.`);
-        }
-
-        const buffer = await clientRes.arrayBuffer();
-        if (buffer.byteLength < 100) {
-          throw new Error('El archivo descargado está vacío o no es un archivo Excel válido.');
-        }
-
-        // Check if response is HTML instead of Excel
-        const textDecoder = new TextDecoder('utf-8');
-        const sampleText = textDecoder.decode(buffer.slice(0, 500));
-        if (sampleText.includes('<!DOCTYPE') || sampleText.includes('<html') || sampleText.includes('Dropbox - ')) {
-          throw new Error('El enlace de Dropbox retornó una página web en lugar del archivo Excel (.xlsx). Asegúrese de usar un enlace de descarga directa pública.');
-        }
-
-        syncedItems = parseExcelBufferToPriceList(buffer, enterpriseId);
-        if (syncedItems.length === 0) {
-          throw new Error('No se encontraron artículos válidos en la hoja de cálculo de Dropbox.');
-        }
+      const rawText = await response.text();
+      let data: any = null;
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        console.error('Non-JSON response from sync endpoint:', rawText.slice(0, 300));
+        throw new Error(
+          `El servidor de sincronización devolvió una respuesta no válida (Código HTTP ${response.status}). ` +
+          'Asegúrese de que el enlace sea un archivo .xlsx de Dropbox válido y público, o use la opción de subida local.'
+        );
       }
 
-      // 3. Save results to state and local/Firestore persistence
+      if (!response.ok || !data || !data.success) {
+        throw new Error(data?.error || `Error al sincronizar lista de Dropbox (Código ${response.status})`);
+      }
+
+      if (!Array.isArray(data.items) || data.items.length === 0) {
+        throw new Error('No se encontraron artículos válidos en el archivo Excel procesado.');
+      }
+
+      const syncedItems: PriceListItem[] = data.items;
       setCatalog(syncedItems);
 
       const newConfig: PriceListConfig = {
@@ -1897,6 +1882,25 @@ export default function ProformaPriceListModal({
                     {isSyncing ? 'Sincronizando...' : 'Sincronizar Ahora'}
                   </button>
                 </div>
+
+                {directDropboxDownloadUrl && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-blue-700 dark:text-blue-300 bg-blue-50/70 dark:bg-blue-950/40 px-3.5 py-2 rounded-xl border border-blue-200/60 dark:border-blue-900/40 animate-in fade-in duration-150">
+                    <span className="flex items-center gap-1.5 font-medium">
+                      <Link2 className="w-3.5 h-3.5 text-blue-500" />
+                      Enlace de Dropbox identificado
+                    </span>
+                    <a
+                      href={directDropboxDownloadUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-bold underline hover:text-blue-900 dark:hover:text-blue-100 flex items-center gap-1 cursor-pointer"
+                      title="Descargar archivo .xlsx directamente a su dispositivo"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Descargar archivo directo (.xlsx)
+                    </a>
+                  </div>
+                )}
 
                 {/* Local Excel upload alternative */}
                 <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
