@@ -1,0 +1,6 @@
+{
+  "summary": "Plan de implementación para el Módulo de Buró de Crédito:\n1. Incorporación de Política de Tolerancia y Gracia de Mora (Perdón de Atraso <= X días) con reclasificación automática de saldo vencido a saldo por vencer.\n2. Control y desactivación del ajuste automático de +1 año en fecha de vencimiento (Regla 3), canalizando registros incongruentes al Libro de Rechazos para revisión manual.\n3. Actualización de auditoría de fases, estadísticas en pantalla y exportación de archivos limpios y de rechazos.",
+  "updatedAt": "2026-11-06T18:39:35.706886227Z",
+  "requestFeedback": true,
+  "userFacing": true
+}

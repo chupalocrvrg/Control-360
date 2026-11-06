@@ -96,6 +96,31 @@ export default function Buro() {
   const [loadingRefBases, setLoadingRefBases] = useState<boolean>(false);
   const [savingRefBase, setSavingRefBase] = useState<boolean>(false);
   const [showRefModal, setShowRefModal] = useState<boolean>(false);
+
+  // Grace Period & Date Validation States
+  const [enableGracePeriod, setEnableGracePeriod] = useState<boolean>(() => {
+    if (typeof window !== 'undefined' && currentEnterpriseId) {
+      const saved = localStorage.getItem(`buro_enable_grace_${currentEnterpriseId}`);
+      return saved !== null ? saved === 'true' : true;
+    }
+    return true;
+  });
+
+  const [gracePeriodDays, setGracePeriodDays] = useState<number>(() => {
+    if (typeof window !== 'undefined' && currentEnterpriseId) {
+      const saved = localStorage.getItem(`buro_grace_days_${currentEnterpriseId}`);
+      return saved ? parseInt(saved, 10) || 30 : 30;
+    }
+    return 30;
+  });
+
+  const [allowDateYearPatch, setAllowDateYearPatch] = useState<boolean>(() => {
+    if (typeof window !== 'undefined' && currentEnterpriseId) {
+      const saved = localStorage.getItem(`buro_allow_date_patch_${currentEnterpriseId}`);
+      return saved === 'true';
+    }
+    return false;
+  });
   const [processing, setProcessing] = useState<boolean>(false);
   const [result, setResult] = useState<BuroProcessingResult | null>(null);
   const [activeTab, setActiveTab] = useState<'principal' | 'rechazos' | 'auditoria' | 'historial'>('principal');
@@ -427,6 +452,28 @@ export default function Buro() {
     }
   };
 
+  const handleEnableGracePeriodChange = (val: boolean) => {
+    setEnableGracePeriod(val);
+    if (currentEnterpriseId) {
+      localStorage.setItem(`buro_enable_grace_${currentEnterpriseId}`, String(val));
+    }
+  };
+
+  const handleGracePeriodDaysChange = (val: number) => {
+    const clamped = Math.max(0, val);
+    setGracePeriodDays(clamped);
+    if (currentEnterpriseId) {
+      localStorage.setItem(`buro_grace_days_${currentEnterpriseId}`, String(clamped));
+    }
+  };
+
+  const handleAllowDateYearPatchChange = (val: boolean) => {
+    setAllowDateYearPatch(val);
+    if (currentEnterpriseId) {
+      localStorage.setItem(`buro_allow_date_patch_${currentEnterpriseId}`, String(val));
+    }
+  };
+
   // Handle Drag and Drop
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -492,7 +539,10 @@ export default function Buro() {
         customCutoffDate: cutoffDate,
         expressMinDate: expressMinDate || undefined,
         refFileContent: activeRefContent,
-        useRefBase: useRefBase
+        useRefBase: useRefBase,
+        enableGracePeriod: enableGracePeriod,
+        gracePeriodDays: Number(gracePeriodDays) || 30,
+        allowDateYearPatch: allowDateYearPatch
       });
 
       // If VBA Macro engine is active, execute the macro transformations
@@ -526,7 +576,10 @@ export default function Buro() {
             secondaryFilename: res.rechazosFilename,
             usedRefBase: useRefBase && !!activeRefContent,
             usedMacro: macroConfig.isActive,
-            macroName: macroConfig.macroName
+            macroName: macroConfig.macroName,
+            enableGracePeriod,
+            gracePeriodDays: Number(gracePeriodDays) || 30,
+            allowDateYearPatch
           });
           fetchHistory();
         } catch (dbErr) {
@@ -880,6 +933,74 @@ export default function Buro() {
           </div>
         </div>
 
+        {/* Panel de Políticas de Cartera y Tolerancia de Mora */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200 dark:border-neutral-700/60">
+          {/* 1. Política de Tolerancia / Poner al Día */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-neutral-800 dark:text-neutral-200 flex items-center gap-1.5 cursor-pointer">
+                <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                <span>Tolerancia de Mora (Poner al día)</span>
+              </label>
+              <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                <input
+                  type="checkbox"
+                  checked={enableGracePeriod}
+                  onChange={(e) => handleEnableGracePeriodChange(e.target.checked)}
+                  className="rounded border-neutral-300 text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5 cursor-pointer"
+                />
+                <span>Activar</span>
+              </label>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-neutral-600 dark:text-neutral-400 whitespace-nowrap">
+                Atraso tolerado hasta:
+              </span>
+              <div className="relative w-28">
+                <input
+                  type="number"
+                  min={0}
+                  max={180}
+                  disabled={!enableGracePeriod}
+                  value={gracePeriodDays}
+                  onChange={(e) => handleGracePeriodDaysChange(parseInt(e.target.value, 10) || 0)}
+                  className="w-full px-2.5 py-1.5 rounded-xl text-xs font-bold border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:ring-2 focus:ring-emerald-500 text-center disabled:opacity-50 shadow-sm"
+                />
+                <span className="absolute right-2.5 top-1.5 text-[11px] text-neutral-400 font-bold pointer-events-none">días</span>
+              </div>
+            </div>
+            <p className="text-[11px] text-neutral-500 dark:text-neutral-400 leading-tight">
+              {enableGracePeriod
+                ? `Clientes con mora ≤ ${gracePeriodDays} días reportarán $0.00 vencido y 0 días mora (saldo reclasificado a por vencer).`
+                : 'Desactivado: Se reportarán los días y valores de mora tal como constan en el archivo original.'}
+            </p>
+          </div>
+
+          {/* 2. Control de Ajuste de Fecha de Vencimiento (Regla 3) */}
+          <div className="space-y-2 border-t md:border-t-0 md:border-l border-neutral-200 dark:border-neutral-700/60 pt-3 md:pt-0 md:pl-4">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-neutral-800 dark:text-neutral-200 flex items-center gap-1.5">
+                <Calendar className="w-4 h-4 text-amber-500" />
+                <span>Ajuste si Vencimiento &lt; Concesión (Regla 3)</span>
+              </label>
+              <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-amber-600 dark:text-amber-400">
+                <input
+                  type="checkbox"
+                  checked={allowDateYearPatch}
+                  onChange={(e) => handleAllowDateYearPatchChange(e.target.checked)}
+                  className="rounded border-neutral-300 text-amber-600 focus:ring-amber-500 w-3.5 h-3.5 cursor-pointer"
+                />
+                <span>Ajustar +1 año</span>
+              </label>
+            </div>
+            <p className="text-[11px] text-neutral-500 dark:text-neutral-400 leading-tight">
+              {allowDateYearPatch
+                ? 'Activo: Si no existe coincidencia en la base de cotejo, se sumará 1 año automáticamente para conservar el registro en la cartera limpia.'
+                : 'Recomendado (Desactivado): Si una fecha de vencimiento es menor a concesión, se envía al Libro de Rechazos para revisión manual sin falsear el archivo limpio.'}
+            </p>
+          </div>
+        </div>
+
         {/* Action Row */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
           <div>
@@ -952,7 +1073,7 @@ export default function Buro() {
                 </div>
               </div>
               <p className="text-2xl font-black text-neutral-900 dark:text-neutral-100 mt-2">
-                {(result.stats.fueraFechaCorteCount || 0) + (result.stats.sinDeudaCount || 0) + (result.stats.fueraFechaAplicableCount || 0) + (result.stats.identificacionesIncorrectasCount || 0)}
+                {(result.stats.fueraFechaCorteCount || 0) + (result.stats.sinDeudaCount || 0) + (result.stats.fueraFechaAplicableCount || 0) + (result.stats.identificacionesIncorrectasCount || 0) + (result.stats.vencimientoRechazadosCount || 0)}
               </p>
               <p className="text-xs font-semibold text-rose-600 dark:text-rose-400 mt-1">
                 Destino: {result.rechazosFilename}
@@ -979,7 +1100,7 @@ export default function Buro() {
             <div className="bg-white dark:bg-neutral-900 rounded-3xl p-5 border border-neutral-200 dark:border-neutral-800 shadow-sm">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-bold text-neutral-500 dark:text-neutral-400 uppercase tracking-wider">
-                  Vencimientos Corregidos
+                  Vencimientos Erróneos
                 </p>
                 <div className="p-2 rounded-xl bg-blue-100 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400">
                   <Filter className="w-5 h-5" />
@@ -989,10 +1110,39 @@ export default function Buro() {
                 {result.stats.fecVencimientoErroneaCount || 0}
               </p>
               <p className="text-xs font-semibold text-neutral-500 dark:text-neutral-400 mt-1">
-                Regla 3 (+1 año / Ref) mantenidos en limpia
+                {allowDateYearPatch
+                  ? 'Ajuste forzado +1 año aplicado'
+                  : `${result.stats.vencimientoRechazadosCount || 0} a Rechazos (revisión manual)`}
               </p>
             </div>
           </div>
+
+          {/* Grace Period Highlight Banner */}
+          {result.stats.gracePeriodCount > 0 && (
+            <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-3xl p-5 border border-emerald-200 dark:border-emerald-800/50 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="p-3 rounded-2xl bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 shrink-0">
+                  <ShieldCheck className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                      Política de Tolerancia de Mora Aplicada (Puesta al Día)
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-200 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200">
+                      ≤ {gracePeriodDays} días de mora
+                    </span>
+                  </div>
+                  <p className="text-sm font-semibold text-neutral-900 dark:text-neutral-100 mt-0.5">
+                    <strong>{result.stats.gracePeriodCount} clientes</strong> con atraso leve fueron puestos al día (reportan $0 vencido y 0 días de atraso ante Equifax).
+                  </p>
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+                    Monto total de <strong>$ {result.stats.gracePeriodAmount.toLocaleString('es-EC', { minimumFractionDigits: 2 })}</strong> reclasificado a cartera por vencer, manteniendo la deuda total idéntica.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Quick Excel Downloads */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-indigo-500/10 p-5 rounded-3xl border border-indigo-200 dark:border-indigo-800/50">
@@ -1161,9 +1311,20 @@ export default function Buro() {
                               $ {(r.deuda_total || 0).toFixed(2)}
                             </td>
                             <td className="p-3 text-center font-mono">
-                              <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-bold", r.num_dias_vencido > 0 ? "bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300" : "bg-neutral-100 dark:bg-neutral-800 text-neutral-500")}>
-                                {r.num_dias_vencido}d
-                              </span>
+                              {r.mora_perdonada ? (
+                                <div className="inline-flex flex-col items-center">
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
+                                    0d (Al día)
+                                  </span>
+                                  <span className="text-[9px] text-neutral-400" title={`Atraso original: ${r.dias_mora_original}d ($ ${(r.val_vencido_original || 0).toFixed(2)})`}>
+                                    Tolerado ({r.dias_mora_original}d)
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-bold", r.num_dias_vencido > 0 ? "bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300" : "bg-neutral-100 dark:bg-neutral-800 text-neutral-500")}>
+                                  {r.num_dias_vencido}d
+                                </span>
+                              )}
                             </td>
                             <td className="p-3 text-center font-mono font-bold text-neutral-400">
                               {r.VALOR_NDI}

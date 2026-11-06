@@ -89,6 +89,9 @@ export interface BuroProcessingResult {
     validCedulasCount: number;
     invalidCedulasCount: number;
     totalDeudaProcessed: number;
+    gracePeriodCount: number;
+    gracePeriodAmount: number;
+    vencimientoRechazadosCount: number;
   };
 }
 
@@ -98,6 +101,9 @@ export interface BuroProcessorOptions {
   expressMinDate?: string;
   refFileContent?: string | ArrayBuffer | Map<string, any> | Record<string, any>;
   useRefBase?: boolean;
+  enableGracePeriod?: boolean;
+  gracePeriodDays?: number;
+  allowDateYearPatch?: boolean;
 }
 
 /**
@@ -830,8 +836,11 @@ export function processBuroFile(
     }
   });
 
-  // REGLA 3: compareDates (FECHA DE VENCIMIENTO ERRONEA - Permanece en limpia + copia a rechazos)
+  // REGLA 3: compareDates (FECHA DE VENCIMIENTO ERRONEA)
+  const allowDateYearPatch = options.allowDateYearPatch === true;
   const afterRule3: BuroRecord[] = [];
+  let vencimientoRechazadosCount = 0;
+
   afterRule2.forEach(r => {
     const dtConcesion = parseDateToObj(r.fec_concesion);
     const dtVencimiento = parseDateToObj(r.fec_vencimiento);
@@ -845,27 +854,46 @@ export function processBuroFile(
       if (refMap.has(cleanId) && refMap.get(cleanId)?.fec_vencimiento) {
         correctedDate = refMap.get(cleanId)!.fec_vencimiento!;
         matchMethod = 'Cotejado con Base de Referencia';
-      } else {
-        // Solución 2: Sumar 1 año a la fecha de vencimiento
+
+        fechaVencimientoErronea.push({
+          ...r,
+          fec_vencimiento_original: r.fec_vencimiento,
+          fec_vencimiento: correctedDate,
+          motivo_rechazo: `Fecha de vencimiento (${r.fec_vencimiento}) menor a concesión (${r.fec_concesion}). Corregido con Base de Referencia: ${correctedDate}`
+        });
+
+        afterRule3.push({
+          ...r,
+          fec_vencimiento: correctedDate,
+          fecha_parcheada: true
+        });
+      } else if (allowDateYearPatch) {
+        // Solución con parche +1 año (solo si el usuario lo activó explícitamente)
         const newDt = addYears(dtVencimiento, 1);
         correctedDate = format(newDt, 'dd/MM/yyyy');
-        matchMethod = 'Ajuste automático +1 año en Vencimiento';
+        matchMethod = 'Ajuste forzado +1 año en Vencimiento (Autorizado por usuario)';
+
+        fechaVencimientoErronea.push({
+          ...r,
+          fec_vencimiento_original: r.fec_vencimiento,
+          fec_vencimiento: correctedDate,
+          motivo_rechazo: `Fecha de vencimiento (${r.fec_vencimiento}) menor a concesión (${r.fec_concesion}). ${matchMethod}: ${correctedDate}`
+        });
+
+        afterRule3.push({
+          ...r,
+          fec_vencimiento: correctedDate,
+          fecha_parcheada: true
+        });
+      } else {
+        // Ajuste +1 año desactivado: El registro se envía al Libro de Rechazos para revisión manual y NO va a la base limpia
+        vencimientoRechazadosCount++;
+        fechaVencimientoErronea.push({
+          ...r,
+          fec_vencimiento_original: r.fec_vencimiento,
+          motivo_rechazo: `Fecha de vencimiento (${r.fec_vencimiento}) menor a concesión (${r.fec_concesion}). Rechazado para revisión manual (Ajuste +1 año desactivado).`
+        });
       }
-
-      // Registro respaldado en la hoja de Rechazos
-      fechaVencimientoErronea.push({
-        ...r,
-        fec_vencimiento_original: r.fec_vencimiento,
-        fec_vencimiento: correctedDate,
-        motivo_rechazo: `Fecha de vencimiento (${r.fec_vencimiento}) menor a concesión (${r.fec_concesion}). ${matchMethod}: ${correctedDate}`
-      });
-
-      // El registro SE MANTIENE en la lista principal limpia pero con la fecha corregida
-      afterRule3.push({
-        ...r,
-        fec_vencimiento: correctedDate,
-        fecha_parcheada: true
-      });
     } else {
       afterRule3.push(r);
     }
@@ -910,20 +938,53 @@ export function processBuroFile(
     phase: 8,
     name: 'Depuración y Filtro por Reglas de Negocio Equifax',
     description: 'Ejecución de las 5 Reglas Oficiales de Validación Equifax y segmentación en Libro de Rechazos',
-    status: (fueraDeFechaCorte.length + clientesSinDeuda.length + clientesFueraFechaAplicable.length + identificacionesIncorrectas.length) > 0 ? 'WARNED' : 'COMPLETED',
+    status: (fueraDeFechaCorte.length + clientesSinDeuda.length + fechaVencimientoErronea.length + clientesFueraFechaAplicable.length + identificacionesIncorrectas.length) > 0 ? 'WARNED' : 'COMPLETED',
     inputCount: phase7Input,
     outputCount: principalRecords.length,
     details: [
       `Regla 1 (Fuera Fecha Corte): ${fueraDeFechaCorte.length} removidos.`,
       `Regla 2 (Clientes Sin Deuda): ${clientesSinDeuda.length} removidos.`,
-      `Regla 3 (Fecha Vencimiento Errónea): ${fechaVencimientoErronea.length} corregidos (+1 año / Ref) y respaldados.`,
+      `Regla 3 (Fecha Vencimiento Errónea): ${fechaVencimientoErronea.length} detectados (${allowDateYearPatch ? 'Ajuste +1 año activo' : `${vencimientoRechazadosCount} rechazados para revisión manual`}).`,
       `Regla 4 (Fuera Fecha Aplicable): ${clientesFueraFechaAplicable.length} removidos.`,
       `Regla 5 (Identificaciones Incorrectas): ${identificacionesIncorrectas.length} removidos.`
     ]
   });
 
   // ----------------------------------------------------
-  // FASE 9: ALINEACIÓN DE MOROSIDAD
+  // FASE 8.5: POLÍTICA DE TOLERANCIA Y PERDÓN DE MORA (<= X DÍAS)
+  // ----------------------------------------------------
+  const enableGracePeriod = options.enableGracePeriod !== false;
+  const gracePeriodDays = typeof options.gracePeriodDays === 'number' && options.gracePeriodDays >= 0
+    ? options.gracePeriodDays
+    : 30;
+
+  let gracePeriodCount = 0;
+  let gracePeriodAmount = 0;
+
+  if (enableGracePeriod && gracePeriodDays > 0) {
+    principalRecords.forEach(r => {
+      const currentDays = r.num_dias_vencido || 0;
+      const currentVencido = r.val_vencido || 0;
+
+      if (currentVencido > 0 && currentDays <= gracePeriodDays) {
+        gracePeriodCount++;
+        gracePeriodAmount += currentVencido;
+
+        // Reclasificación contable: transferir vencido a por vencer para preservar deuda total
+        r.val_xvencer = parseNumberSafe(((r.val_xvencer || 0) + currentVencido).toFixed(2));
+        r.val_vencido = 0;
+        r.num_dias_vencido = 0;
+        if (r.num_cuotas_vencidas !== undefined) r.num_cuotas_vencidas = 0;
+        r.ESTADO_OPERACION = 'NORMAL';
+        r.mora_perdonada = true;
+        r.val_vencido_original = currentVencido;
+        r.dias_mora_original = currentDays;
+      }
+    });
+  }
+
+  // ----------------------------------------------------
+  // FASE 9: ALINEACIÓN DE MOROSIDAD (PARA MORA RESTANTE > UMBRAL)
   // ----------------------------------------------------
   const phase9Input = principalRecords.length;
   principalRecords.forEach(r => {
@@ -936,13 +997,16 @@ export function processBuroFile(
 
   audits.push({
     phase: 9,
-    name: 'Alineación de Morosidad',
-    description: 'Auditoría y corrección automatizada de días de atraso en valores vencidos',
-    status: morosityAlignedCount > 0 ? 'WARNED' : 'COMPLETED',
+    name: 'Alineación de Morosidad y Tolerancia',
+    description: 'Auditoría de tolerancia de mora y corrección automatizada de días de atraso en valores vencidos',
+    status: (morosityAlignedCount > 0 || gracePeriodCount > 0) ? 'INFO' : 'COMPLETED',
     inputCount: phase9Input,
     outputCount: principalRecords.length,
     details: [
-      `Se alinearon ${morosityAlignedCount} registros donde existía monto vencido pero los días de mora marcaban 0.`
+      enableGracePeriod && gracePeriodCount > 0
+        ? `Se aplicó política de tolerancia y perdón a ${gracePeriodCount} clientes con mora <= ${gracePeriodDays} días (monto reclasificado: $ ${gracePeriodAmount.toLocaleString('es-EC', { minimumFractionDigits: 2 })}).`
+        : 'Política de tolerancia: Sin registros aplicados.',
+      `Se alinearon ${morosityAlignedCount} registros con mora > ${gracePeriodDays} días donde existía monto vencido pero días de mora marcaban 0.`
     ]
   });
 
@@ -993,7 +1057,10 @@ export function processBuroFile(
       identificacionesIncorrectasCount: identificacionesIncorrectas.length,
       validCedulasCount: principalRecords.length,
       invalidCedulasCount: identificacionesIncorrectas.length,
-      totalDeudaProcessed
+      totalDeudaProcessed,
+      gracePeriodCount,
+      gracePeriodAmount: parseNumberSafe(gracePeriodAmount.toFixed(2)),
+      vencimientoRechazadosCount
     }
   };
 }

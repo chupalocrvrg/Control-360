@@ -11,6 +11,16 @@ export interface ChangelogRelease {
 
 export const staticChangelog: ChangelogRelease[] = [
   {
+    version: "5.56.0",
+    date: "2026-11-06",
+    changes: [
+      "Política de Tolerancia de Mora en Buró de Crédito: Nueva opción configurable para perdonar y poner al día clientes con atrasos leves (≤ X días, configurable ej. 30 días), reportándolos con $0 vencido y 0 días de mora ante Equifax.",
+      "Reclasificación Contable Automática: El saldo vencido perdonado se transfiere íntegramente a cartera por vencer (val_xvencer), preservando con total exactitud la deuda total del cliente.",
+      "Control Desactivable de Ajuste de Fechas (Regla 3): Eliminación de la alteración automática de fechas (+1 año) por defecto; los registros con vencimiento menor a concesión ahora se canalizan de forma segura al Libro de Rechazos para revisión manual.",
+      "Métricas y Trazabilidad en Tiempo Real: Tarjeta destacada de clientes tolerados/puestos al día, indicador visual en la tabla principal y registro detallado en la auditoría de 10 fases."
+    ]
+  },
+  {
     version: "5.55.4",
     date: "2026-10-28",
     changes: [
