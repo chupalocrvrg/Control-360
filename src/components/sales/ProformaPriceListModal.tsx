@@ -442,7 +442,65 @@ export default function ProformaPriceListModal({
     setClientSearch('');
   };
 
-  // Sync with Dropbox via backend endpoint
+  // Fallback helper to attempt downloading & parsing directly in browser
+  const attemptClientSideSync = async (dropboxUrl: string): Promise<PriceListItem[]> => {
+    const candidateUrls: string[] = [];
+    const clean = dropboxUrl.trim();
+
+    if (clean.includes('dropbox.com')) {
+      const cdnBase = clean
+        .replace('www.dropbox.com', 'dl.dropboxusercontent.com')
+        .replace('//dropbox.com', '//dl.dropboxusercontent.com');
+
+      const setParam = (uStr: string, key: string, val: string) => {
+        try {
+          const u = new URL(uStr);
+          u.searchParams.set(key, val);
+          u.searchParams.delete(key === 'raw' ? 'dl' : 'raw');
+          return u.toString();
+        } catch {
+          return uStr;
+        }
+      };
+
+      candidateUrls.push(setParam(cdnBase, 'raw', '1'));
+      candidateUrls.push(setParam(clean, 'raw', '1'));
+      candidateUrls.push(setParam(cdnBase, 'dl', '1'));
+      candidateUrls.push(setParam(clean, 'dl', '1'));
+    } else {
+      candidateUrls.push(clean);
+    }
+
+    let lastErr = '';
+    for (const url of candidateUrls) {
+      try {
+        const resp = await fetch(url, { redirect: 'follow' });
+        if (!resp.ok) {
+          lastErr = `Dropbox HTTP ${resp.status}`;
+          continue;
+        }
+        const buf = await resp.arrayBuffer();
+        if (buf.byteLength < 100) continue;
+
+        // Check if returned page is HTML preview
+        const head = new TextDecoder().decode(buf.slice(0, 300));
+        if (head.includes('<!DOCTYPE') || head.includes('<html')) {
+          lastErr = 'El enlace retornó una página web de Dropbox en lugar del archivo Excel (.xlsx). Asegúrese de que sea un enlace público.';
+          continue;
+        }
+
+        const items = parseExcelBufferToPriceList(buf, enterpriseId);
+        if (items && items.length > 0) {
+          return items;
+        }
+      } catch (err: any) {
+        lastErr = err.message || 'Error de red al descargar directamente en el navegador';
+      }
+    }
+    throw new Error(lastErr || 'No se pudo descargar o procesar el archivo Excel directamente.');
+  };
+
+  // Sync with Dropbox via backend endpoint with client-side fallback
   const handleSyncDropbox = async () => {
     if (!dropboxUrlInput.trim()) {
       showToast('Por favor ingrese el enlace de Dropbox del archivo Excel.', 'warning');
@@ -450,47 +508,53 @@ export default function ProformaPriceListModal({
     }
 
     setIsSyncing(true);
+    let syncedItems: PriceListItem[] | null = null;
+    let syncErrorMessage = '';
 
+    // 1. First attempt: Server-side API endpoint (/api/price-list/sync-dropbox)
     try {
-      let response: Response;
-      try {
-        response = await fetch('/api/price-list/sync-dropbox', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            dropboxUrl: dropboxUrlInput.trim(),
-            enterpriseId
-          })
-        });
-      } catch (networkErr: any) {
-        console.error('Network error calling /api/price-list/sync-dropbox:', networkErr);
-        throw new Error(
-          'No se pudo conectar con el servicio backend de sincronización. ' +
-          'Si su despliegue es estático o sin servidor activo, puede descargar el archivo y usar el botón "Subir archivo Excel local (.xlsx)".'
-        );
-      }
+      const response = await fetch('/api/price-list/sync-dropbox', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dropboxUrl: dropboxUrlInput.trim(),
+          enterpriseId
+        })
+      });
 
       const rawText = await response.text();
       let data: any = null;
       try {
         data = JSON.parse(rawText);
       } catch {
-        console.error('Non-JSON response from sync endpoint:', rawText.slice(0, 300));
-        throw new Error(
-          `El servidor de sincronización devolvió una respuesta no válida (Código HTTP ${response.status}). ` +
-          'Asegúrese de que el enlace sea un archivo .xlsx de Dropbox válido y público, o use la opción de subida local.'
-        );
+        console.warn('Backend sync endpoint returned non-JSON response:', rawText.slice(0, 200));
       }
 
-      if (!response.ok || !data || !data.success) {
-        throw new Error(data?.error || `Error al sincronizar lista de Dropbox (Código ${response.status})`);
+      if (response.ok && data && data.success && Array.isArray(data.items) && data.items.length > 0) {
+        syncedItems = data.items;
+      } else {
+        syncErrorMessage = data?.error || (response.status >= 500 ? 'El servidor backend reportó un inconveniente al procesar la descarga.' : `Error de sincronización (Código ${response.status})`);
       }
+    } catch (netErr: any) {
+      console.warn('Network error calling backend sync endpoint:', netErr);
+      syncErrorMessage = netErr.message || 'Error de conexión con el servicio de sincronización.';
+    }
 
-      if (!Array.isArray(data.items) || data.items.length === 0) {
-        throw new Error('No se encontraron artículos válidos en el archivo Excel procesado.');
+    // 2. Second attempt: Client-side direct browser download fallback
+    if (!syncedItems) {
+      console.log('[Dropbox Sync] Attempting client-side direct download fallback...');
+      try {
+        syncedItems = await attemptClientSideSync(dropboxUrlInput.trim());
+      } catch (clientErr: any) {
+        console.error('[Dropbox Sync] Client-side fallback failed:', clientErr);
+        if (!syncErrorMessage) {
+          syncErrorMessage = clientErr.message || 'No se pudo descargar el archivo de Dropbox.';
+        }
       }
+    }
 
-      const syncedItems: PriceListItem[] = data.items;
+    // 3. Process final result
+    if (syncedItems && syncedItems.length > 0) {
       setCatalog(syncedItems);
 
       const newConfig: PriceListConfig = {
@@ -508,12 +572,14 @@ export default function ProformaPriceListModal({
 
       showToast(`¡Lista sincronizada con éxito! ${syncedItems.length} artículos cargados.`, 'success');
       setActiveTab('cotizador');
-    } catch (err: any) {
-      console.error('Dropbox sync failed:', err);
-      showToast(err.message || 'Error al conectar con Dropbox. Verifique el enlace.', 'error');
-    } finally {
-      setIsSyncing(false);
+    } else {
+      showToast(
+        syncErrorMessage || 'No se pudo sincronizar automáticamente. Puede usar la opción de subida local (.xlsx) o el enlace de descarga directa.',
+        'error'
+      );
     }
+
+    setIsSyncing(false);
   };
 
   // Local Excel file upload

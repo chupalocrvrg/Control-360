@@ -35,34 +35,37 @@ export async function syncDropboxExcel(dropboxUrl: string, enterpriseId?: string
   // Generate candidate URLs for direct binary download
   const candidateUrls: string[] = [];
 
+  const setUrlParam = (urlStr: string, paramName: string, paramValue: string): string => {
+    try {
+      const u = new URL(urlStr);
+      u.searchParams.set(paramName, paramValue);
+      u.searchParams.delete(paramName === 'raw' ? 'dl' : 'raw');
+      return u.toString();
+    } catch {
+      let res = urlStr.replace(new RegExp(`([?&])${paramName}=[01]`), `$1${paramName}=${paramValue}`);
+      if (!res.includes(`${paramName}=`)) {
+        res += res.includes('?') ? `&${paramName}=${paramValue}` : `?${paramName}=${paramValue}`;
+      }
+      return res;
+    }
+  };
+
   if (cleanInput.includes('dropbox.com')) {
-    // 1. Direct CDN domain (dl.dropboxusercontent.com)
-    const cdnUrl = cleanInput
+    const cdnBase = cleanInput
       .replace('www.dropbox.com', 'dl.dropboxusercontent.com')
-      .replace('dropbox.com', 'dl.dropboxusercontent.com')
-      .replace(/([?&])dl=[01]/, '')
-      .replace(/([?&])raw=1/, '');
-    candidateUrls.push(cdnUrl);
+      .replace('//dropbox.com', '//dl.dropboxusercontent.com');
 
-    // 2. raw=1 parameter on original host
-    let rawUrl = cleanInput;
-    if (rawUrl.includes('dl=0')) {
-      rawUrl = rawUrl.replace(/([?&])dl=0/, '$1raw=1');
-    } else if (rawUrl.includes('dl=1')) {
-      rawUrl = rawUrl.replace(/([?&])dl=1/, '$1raw=1');
-    } else if (!rawUrl.includes('raw=1')) {
-      rawUrl += rawUrl.includes('?') ? '&raw=1' : '?raw=1';
-    }
-    candidateUrls.push(rawUrl);
+    // 1. Direct CDN URL with raw=1
+    candidateUrls.push(setUrlParam(cdnBase, 'raw', '1'));
 
-    // 3. dl=1 parameter
-    let dlUrl = cleanInput;
-    if (dlUrl.includes('dl=0')) {
-      dlUrl = dlUrl.replace(/([?&])dl=0/, '$1dl=1');
-    } else if (!dlUrl.includes('dl=1')) {
-      dlUrl += dlUrl.includes('?') ? '&dl=1' : '?dl=1';
-    }
-    candidateUrls.push(dlUrl);
+    // 2. Direct CDN URL with dl=1
+    candidateUrls.push(setUrlParam(cdnBase, 'dl', '1'));
+
+    // 3. Original host with raw=1
+    candidateUrls.push(setUrlParam(cleanInput, 'raw', '1'));
+
+    // 4. Original host with dl=1
+    candidateUrls.push(setUrlParam(cleanInput, 'dl', '1'));
   } else {
     candidateUrls.push(cleanInput);
   }

@@ -1,7 +1,7 @@
 {
   "name": "control-financiero",
   "private": true,
-  "version": "5.55.3",
+  "version": "5.55.4",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",

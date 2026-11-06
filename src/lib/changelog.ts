@@ -11,6 +11,15 @@ export interface ChangelogRelease {
 
 export const staticChangelog: ChangelogRelease[] = [
   {
+    version: "5.55.4",
+    date: "2026-10-28",
+    changes: [
+      "Solución al Error HTTP 500 en Sincronización de Dropbox: Implementación de arquitectura de doble capa con respaldo de descarga y procesamiento directo en el navegador cliente.",
+      "Optimización de Parsing de Enlaces Dropbox: Candidatos con parámetros 'raw=1' y 'dl=1' normalizados para soporte total de URLs tipo '/scl/fi/' con 'rlkey'.",
+      "Manejo Seguro de Peticiones en Backend: Análisis seguro del cuerpo de solicitudes JSON tanto en Express como en funciones serverless Vercel."
+    ]
+  },
+  {
     version: "5.55.3",
     date: "2026-10-23",
     changes: [
