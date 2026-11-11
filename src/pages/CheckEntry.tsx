@@ -12,11 +12,12 @@ import * as XLSX from 'xlsx';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
 import { logAudit, AuditAction } from '../lib/audit';
 import { isSuperAdminEmail } from '../lib/utils';
+import { duplicateDetection } from '../lib/duplicateDetection';
 
 export default function CheckEntry() {
   const { user, profile, originalUser, impersonatedUser } = useAuth();
   const { settings } = useSettings();
-  const { showToast, showAlert } = useNotification();
+  const { showToast, showAlert, showConfirm } = useNotification();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [beneficiaries, setBeneficiaries] = useState<string[]>([]);
@@ -42,6 +43,8 @@ export default function CheckEntry() {
 
   const [installments, setInstallments] = useState<number[]>([]);
   const [finalTotal, setFinalTotal] = useState(0);
+  const [showDateConfirmation, setShowDateConfirmation] = useState(false);
+  const [confirmedVencido, setConfirmedVencido] = useState(false);
 
   const currentEnterpriseId = isSuperAdmin
     ? (selectedEnterpriseId || user?.uid || '')
@@ -78,8 +81,12 @@ export default function CheckEntry() {
   const loadBeneficiaries = async () => {
     if (!user) return;
     try {
-      const snapshot = await getDocs(collection(db, 'beneficiaries'));
-      const list = snapshot.docs
+      const [beneficiariesSnap, checksSnap] = await Promise.all([
+        getDocs(collection(db, 'beneficiaries')),
+        getDocs(collection(db, 'checks'))
+      ]);
+
+      const beneficiaryNames = beneficiariesSnap.docs
         .map(doc => ({ id: doc.id, ...doc.data() as any }))
         .filter(item => 
           item.enterpriseId === currentEnterpriseId || 
@@ -87,8 +94,12 @@ export default function CheckEntry() {
           (!item.enterpriseId && !item.userId)
         )
         .map(item => item.name);
+
+      const checkNames = checksSnap.docs
+        .map(doc => doc.data().beneficiaryName as string)
+        .filter(Boolean);
       
-      setBeneficiaries(Array.from(new Set(list)));
+      setBeneficiaries(Array.from(new Set([...beneficiaryNames, ...checkNames])));
     } catch (error) {
       handleFirestoreError(error, OperationType.LIST, 'beneficiaries');
     }
@@ -266,6 +277,34 @@ export default function CheckEntry() {
     setLoading(true);
 
     try {
+      // Validate dates
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      const isBackdated = installments.some((_, i) => {
+        const checkDate = addMonths(new Date(formData.firstPaymentDate), i);
+        return checkDate < today;
+      });
+
+       if (isBackdated && !confirmedVencido) {
+        setShowDateConfirmation(true);
+        setLoading(false);
+        return;
+      }
+      
+      const isDuplicate = await duplicateDetection.checkCheck({
+        beneficiaryName: formData.beneficiaryName,
+        amount: installments[0],
+        dueDate: format(new Date(formData.firstPaymentDate), 'yyyy-MM-dd')
+      });
+
+      if (isDuplicate) {
+          const proceed = await showConfirm('Posible Registro Duplicado', 'Ya existen cheques registrados con este beneficiario, monto y fecha. ¿Desea continuar?', { type: 'warning' });
+          if (!proceed) {
+              setLoading(false);
+              return;
+          }
+      }
+      
       if (!beneficiaries.includes(formData.beneficiaryName)) {
         try {
           await addDoc(collection(db, 'beneficiaries'), {
@@ -640,9 +679,22 @@ export default function CheckEntry() {
           </div>
 
           <div className="p-8 flex justify-end">
+            {showDateConfirmation && (
+              <div className="p-4 mb-6 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/30 rounded-2xl flex items-center gap-3 animate-in fade-in">
+                <input
+                  type="checkbox"
+                  checked={confirmedVencido}
+                  onChange={(e) => setConfirmedVencido(e.target.checked)}
+                  className="w-5 h-5 rounded border-red-300 text-red-600 focus:ring-red-500"
+                />
+                <p className="text-xs font-bold text-red-800 dark:text-red-400">
+                  Algunas fechas de pago son anteriores a la fecha actual. Confirmo que deseo registrar estos pagos vencidos.
+                </p>
+              </div>
+            )}
             <button
               type="submit"
-              disabled={loading || finalTotal <= 0}
+              disabled={loading || finalTotal <= 0 || (showDateConfirmation && !confirmedVencido)}
               className="px-10 py-4 bg-indigo-600 dark:bg-indigo-500 text-white rounded-2xl text-lg font-black hover:bg-indigo-700 dark:hover:bg-indigo-600 transition-all shadow-xl shadow-indigo-100 dark:shadow-none disabled:opacity-50 disabled:grayscale"
             >
               {loading ? 'Procesando Transacción...' : 'Generar Programación de Pagos'}

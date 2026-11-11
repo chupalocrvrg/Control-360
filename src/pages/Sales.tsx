@@ -24,6 +24,7 @@ import { useNotification } from '../contexts/NotificationContext';
 import { logAudit, AuditAction } from '../lib/audit';
 import { format } from 'date-fns';
 import { isSuperAdminEmail } from '../lib/utils';
+import { duplicateDetection } from '../lib/duplicateDetection';
 
 interface Employee {
   id: string;
@@ -320,6 +321,20 @@ export default function Sales() {
         article: formData.article,
         enterpriseId: targetEnterpriseId
       };
+      
+      if (!editingSale) {
+        const isDuplicate = await duplicateDetection.checkContadoSale({
+            totalValue: saleData.totalValue,
+            clientName: saleData.clientName,
+            employeeId: saleData.employeeId,
+            date: saleData.date
+        });
+        if (isDuplicate) {
+            showToast('Ya existe una venta registrada con esos datos', 'error');
+            setIsSubmitting(false);
+            return;
+        }
+      }
 
       if (editingSale) {
         await updateDoc(doc(db, 'sales', editingSale.id), saleData);
@@ -348,6 +363,18 @@ export default function Sales() {
       const targetEnterpriseId = isSuperAdmin
         ? (formEnterpriseId || selectedEnterpriseId || user?.uid || '')
         : (profile?.role === 'enterprise' ? user?.uid : (profile?.enterpriseId || user?.uid || ''));
+
+      // Validación de duplicados
+      const isDuplicate = await duplicateDetection.checkCreditSale({
+          grossTotal: creditSaleData.grossTotal,
+          clientName: creditSaleData.clientName,
+          sellerId: creditSaleData.sellerId,
+          saleDate: creditSaleData.saleDate
+      });
+      if (isDuplicate) {
+          showToast('Ya existe una venta a crédito registrada con esos datos', 'error');
+          return;
+      }
 
       const result = await executeCreditSaleTransaction(
         targetEnterpriseId,

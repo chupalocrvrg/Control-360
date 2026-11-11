@@ -11,6 +11,45 @@ export interface ChangelogRelease {
 
 export const staticChangelog: ChangelogRelease[] = [
   {
+    version: "5.60.0",
+    date: "2026-11-11",
+    changes: [
+      "Autocompletado Inteligente de Beneficiarios: El campo de beneficiario ahora sugiere automáticamente nombres tanto de la base de datos de beneficiarios registrados como de cheques emitidos previamente, optimizando la velocidad de registro.",
+      "Persistencia Automática de Beneficiarios: Cualquier beneficiario nuevo ingresado se agrega automáticamente al catálogo para futuras transacciones."
+    ]
+  },
+  {
+    version: "5.59.0",
+    date: "2026-11-11",
+    changes: [
+      "Optimización de Detección de Duplicados: Se refinó el servicio de validación para separar la lógica de ventas al contado (query en 'sales') de ventas a crédito (query en 'credit_sales'), asegurando una detección precisa en todos los tipos de transacciones."
+    ]
+  },
+  {
+    version: "5.58.0",
+    date: "2026-11-11",
+    changes: [
+      "Implementación de validación de duplicados: Se añadió detección preventiva en los módulos de Ventas, Cheques y Cobros, bloqueando o solicitando confirmación ante registros coincidentes para garantizar la integridad de los datos."
+    ]
+  },
+  {
+    version: "5.57.0",
+    date: "2026-11-11",
+    changes: [
+      "Edición de Cheques con Auditoría: Se habilitó la modificación de montos y fechas de cheques registrados mediante un Modal con historial de cambios (EditCheckModal) y registro obligatorio de motivos.",
+      "Validación de Fechas en Registro de Cheques: Implementación de bloqueo y confirmación manual para registros de cheques con fecha de pago anterior a la fecha actual.",
+      "Integración en Explorador de Pagos: Se añadió la capacidad de editar cheques directamente desde la tabla de búsqueda en CheckSearch."
+    ]
+  },
+  {
+    version: "5.56.1",
+    date: "2026-11-11",
+    changes: [
+      "Robustez en Guardado de Proformas: Implementación de saneamiento recursivo de datos para eliminar valores 'undefined' incompatibles con Firestore, resolviendo el error 'Error al guardar la proforma en la nube'.",
+      "Mejora en Diagnóstico de Errores: El sistema ahora reporta mensajes de error detallados en las notificaciones de guardado para facilitar la identificación de problemas de red o permisos."
+    ]
+  },
+  {
     version: "5.56.0",
     date: "2026-11-06",
     changes: [

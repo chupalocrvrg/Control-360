@@ -6,11 +6,12 @@ import { db } from '../firebase';
 import { collection, query, where, getDocs, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { formatCurrency, cn } from '../lib/utils';
 import { format, parseISO } from 'date-fns';
-import { Download, Search, ChevronDown, ChevronRight, FilterX, FileText, CheckCircle2, AlertCircle, Trash2, RotateCcw, Trash, X } from 'lucide-react';
+import { Download, Search, ChevronDown, ChevronRight, FilterX, FileText, CheckCircle2, AlertCircle, Trash2, RotateCcw, Trash, X, Pencil } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
 import { isSuperAdminEmail } from '../lib/utils';
 import { logAudit, AuditAction } from '../lib/audit';
+import { EditCheckModal } from '../components/sales/EditCheckModal';
 
 interface Invoice {
   id: string;
@@ -62,6 +63,7 @@ export default function CheckSearch() {
   const [trashChecks, setTrashChecks] = useState<Check[]>([]);
   const [trashLoading, setTrashLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [editingCheck, setEditingCheck] = useState<Check | null>(null);
   const ITEMS_PER_PAGE = 10;
 
   const [filters, setFilters] = useState({
@@ -789,6 +791,17 @@ export default function CheckSearch() {
             </div>
           </div>
         </div>
+      )}
+      {editingCheck && (
+        <EditCheckModal
+          check={editingCheck}
+          isOpen={!!editingCheck}
+          onClose={() => setEditingCheck(null)}
+          onSave={() => {
+            loadData();
+            setEditingCheck(null);
+          }}
+        />
       )}
     </div>
   );

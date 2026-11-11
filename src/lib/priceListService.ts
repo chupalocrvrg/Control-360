@@ -16,6 +16,29 @@ import {
 } from 'firebase/firestore';
 import { PriceListItem, CreditPlanOption, Proforma, ProformaItem, PriceListConfig } from '../types/proforma';
 
+/**
+ * Recursively removes 'undefined' values from an object or array to prevent Firestore write errors.
+ */
+export function sanitizeForFirestore(data: any): any {
+  if (data === null || data === undefined) return null;
+  if (typeof data !== 'object') return data;
+  if (data instanceof Date) return data;
+  if (data instanceof Timestamp) return data;
+
+  if (Array.isArray(data)) {
+    return data.map(v => sanitizeForFirestore(v));
+  }
+
+  const result: any = {};
+  Object.keys(data).forEach(key => {
+    const val = data[key];
+    if (val !== undefined) {
+      result[key] = sanitizeForFirestore(val);
+    }
+  });
+  return result;
+}
+
 // Helper to sanitize numeric values from Excel (e.g. "$1,250.00", "1250,50", 1250)
 export function parseExcelNumber(val: any): number {
   if (val === undefined || val === null || val === '') return 0;
@@ -647,13 +670,15 @@ export async function savePriceListConfig(enterpriseId: string, config: PriceLis
  */
 export async function saveProforma(proformaData: Omit<Proforma, 'id'>): Promise<string> {
   try {
+    const cleanData = sanitizeForFirestore(proformaData);
     const docRef = await addDoc(collection(db, 'proformas'), {
-      ...proformaData,
+      ...cleanData,
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now()
     });
     return docRef.id;
   } catch (err) {
+    console.error('saveProforma Error:', err);
     handleFirestoreError(err, OperationType.WRITE, 'proformas');
     return ''; // unreachable due to throw
   }

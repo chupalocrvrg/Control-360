@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNotification } from '../../contexts/NotificationContext';
 import { logAudit, AuditAction } from '../../lib/audit';
 import { format } from 'date-fns';
+import { duplicateDetection } from '../../lib/duplicateDetection';
 
 export interface ManualCollectionData {
   id: string;
@@ -118,31 +119,19 @@ export function ManualCollectionModal({
       setIsSubmitting(true);
       const targetEntId = currentEnterpriseId || user.uid;
 
-      // 1. Check for potential duplicate range for the same collector (only if receipts are used)
+       // 1. Check for potential duplicate range for the same collector (only if receipts are used)
       if (!formData.noReceipt) {
-        const qDup = query(
-          collection(db, 'collections'), 
-          where('enterpriseId', '==', targetEntId),
-          where('employeeId', '==', formData.employeeId)
-        );
-        const snapDup = await getDocs(qDup);
-        const existingCollections = snapDup.docs
-          .map(d => ({ id: d.id, ...d.data() } as any))
-          .filter(c => !editingCollection || c.id !== editingCollection.id);
+        const isDuplicate = await duplicateDetection.checkCollection({
+          amount: totalColl,
+          reciboNumber: formData.initialReceipt,
+          createdBy: formData.employeeId,
+          date: formData.initialDate
+        });
 
-        const newStart = formData.initialReceipt.toUpperCase();
-        const newEnd = formData.finalReceipt.toUpperCase();
-
-        const duplicate = existingCollections.find(c => 
-          (c.initialReceipt === newStart && c.finalReceipt === newEnd) ||
-          (c.initialReceipt === newStart) ||
-          (c.finalReceipt === newEnd)
-        );
-
-        if (duplicate) {
+        if (isDuplicate) {
           const proceed = await showConfirm(
             'Posible Cobranza Duplicada', 
-            `Ya existe un registro de cobranza para este cobrador con recibos similares (${duplicate.initialReceipt} - ${duplicate.finalReceipt}). ¿Desea continuar de todas formas?`,
+            `Ya existe un registro de cobranza para este cobrador con datos similares. ¿Desea continuar de todas formas?`,
             { type: 'warning' }
           );
           if (!proceed) {

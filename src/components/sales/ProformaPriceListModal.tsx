@@ -688,9 +688,23 @@ export default function ProformaPriceListModal({
 
       // 2. Pasar automáticamente a la pestaña Historial de Proformas
       setActiveTab('historial');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving proforma:', err);
-      showToast('Error al guardar la proforma en la nube.', 'error');
+      let errorMsg = 'Error al guardar la proforma en la nube.';
+      
+      // Try to extract detailed error from handleFirestoreError throw
+      try {
+        const parsed = JSON.parse(err.message);
+        if (parsed.error) {
+          errorMsg = `Error: ${parsed.error}`;
+        }
+      } catch {
+        if (err.message && typeof err.message === 'string') {
+          errorMsg = `Error: ${err.message.slice(0, 100)}`;
+        }
+      }
+      
+      showToast(errorMsg, 'error');
     }
   };
 
