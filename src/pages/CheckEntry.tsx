@@ -363,7 +363,13 @@ export default function CheckEntry() {
             bank: formData.bank || '',
             createdAt: serverTimestamp()
           });
+          console.log('Successfully saved check:', {
+            userId: user!.uid,
+            enterpriseId: getEnterpriseIdToSave(),
+            checkNumber: checkNum
+          });
         } catch (error) {
+          console.error('Error in addDoc check:', error);
           handleFirestoreError(error, OperationType.CREATE, 'checks');
         }
       }
