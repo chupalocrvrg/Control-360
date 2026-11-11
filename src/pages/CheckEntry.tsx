@@ -384,7 +384,8 @@ export default function CheckEntry() {
 
     } catch (error) {
       console.error('Error saving checks:', error);
-      showToast('Error al guardar los cheques', 'error');
+      console.error('Error saving checks:', error);
+      showToast(`Error al guardar los cheques: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
     } finally {
       setLoading(false);
     }
