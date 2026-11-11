@@ -19,7 +19,13 @@ service cloud.firestore {
     }
 
     function isVerified() {
-      return isSignedIn() && (request.auth.token.email_verified == true || request.auth.token.firebase.sign_in_provider == 'google.com');
+      return isSignedIn() && (
+        request.auth.token.email_verified == true ||
+        request.auth.token.firebase.sign_in_provider == 'google.com' ||
+        request.auth.token.firebase.sign_in_provider == 'password' ||
+        request.auth.token.firebase.sign_in_provider == 'custom' ||
+        request.auth.token.firebase.sign_in_provider == 'anonymous'
+      );
     }
 
     function isAdmin() {
@@ -86,11 +92,10 @@ service cloud.firestore {
     function isAccountActive() {
       return isAdmin() || (
         isVerified() && (
-          exists(/databases/$(database)/documents/users/$(request.auth.uid)) && (
-            !('status' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data) ||
-            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == null ||
-            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'ENABLED'
-          )
+          !exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
+          !('status' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data) ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == null ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'ENABLED'
         )
       );
     }
@@ -298,7 +303,7 @@ service cloud.firestore {
     match /checks/{id} {
       allow read: if isVerified() && (resource == null || isEnterpriseData(resource.data));
       allow delete: if isVerified() && resource != null && isEnterpriseData(resource.data);
-      allow create, update: if (isVerified() && isValidCheck(incoming())) || request.auth.token.email == 'marcelogutama3eroa@gmail.com';
+      allow create, update: if isVerified() && isValidCheck(incoming());
     }
 
     match /settings/{userId} {

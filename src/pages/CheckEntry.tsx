@@ -350,6 +350,10 @@ export default function CheckEntry() {
         const checkNum = generateCheckNumber(formData.initialCheckNumber, i);
         
         try {
+          console.log('DEBUG: Attempting to save check:', {
+            userId: user.uid,
+            enterpriseId: getEnterpriseIdToSave(),
+          });
           await addDoc(collection(db, 'checks'), {
             userId: user.uid,
             enterpriseId: getEnterpriseIdToSave(),

@@ -11,6 +11,20 @@ export interface ChangelogRelease {
 
 export const staticChangelog: ChangelogRelease[] = [
   {
+    version: "5.60.2",
+    date: "2026-11-11",
+    changes: [
+      "Solución de Permisos en Firestore para Cuentas No-Admin: Ajuste en la verificación de autenticación (isVerified) y estado de cuenta (isAccountActive) para permitir la creación y consulta de cheques, facturas y beneficiarios a usuarios no administradores y empleados."
+    ]
+  },
+  {
+    version: "5.60.1",
+    date: "2026-11-11",
+    changes: [
+      "Diagnóstico y depuración: Incorporación de trazas de logs detallados en el módulo de registro de cheques para identificar y resolver fallos de permisos en Firestore durante el guardado de transacciones."
+    ]
+  },
+  {
     version: "5.60.0",
     date: "2026-11-11",
     changes: [
