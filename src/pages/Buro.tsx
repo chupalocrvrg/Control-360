@@ -34,6 +34,7 @@ import {
   Code2
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useSettings } from '../contexts/SettingsContext';
 import { useNotification } from '../contexts/NotificationContext';
 import { db } from '../firebase';
 import { collection, addDoc, getDocs, deleteDoc, doc, query, where, orderBy, Timestamp } from 'firebase/firestore';
@@ -75,6 +76,7 @@ export interface BuroRefBaseDoc {
 
 export default function Buro() {
   const { user, profile } = useAuth();
+  const { settings } = useSettings();
   const { showToast } = useNotification();
   const currentEnterpriseId = profile?.enterpriseId || user?.uid;
 
@@ -121,6 +123,38 @@ export default function Buro() {
     }
     return false;
   });
+
+  const [enableCarteraCastigada, setEnableCarteraCastigada] = useState<boolean>(() => {
+    if (typeof window !== 'undefined' && currentEnterpriseId) {
+      const saved = localStorage.getItem(`buro_enable_castigo_${currentEnterpriseId}`);
+      return saved !== null ? saved === 'true' : true;
+    }
+    return true;
+  });
+
+  const [diasCastigo, setDiasCastigo] = useState<number>(() => {
+    if (typeof window !== 'undefined' && currentEnterpriseId) {
+      const saved = localStorage.getItem(`buro_dias_castigo_${currentEnterpriseId}`);
+      return saved ? parseInt(saved, 10) || 120 : 120;
+    }
+    return 120;
+  });
+
+  const handleEnableCarteraCastigadaChange = (val: boolean) => {
+    setEnableCarteraCastigada(val);
+    if (currentEnterpriseId) {
+      localStorage.setItem(`buro_enable_castigo_${currentEnterpriseId}`, String(val));
+    }
+  };
+
+  const handleDiasCastigoChange = (val: number) => {
+    const clamped = Math.max(0, val);
+    setDiasCastigo(clamped);
+    if (currentEnterpriseId) {
+      localStorage.setItem(`buro_dias_castigo_${currentEnterpriseId}`, String(clamped));
+    }
+  };
+
   const [processing, setProcessing] = useState<boolean>(false);
   const [result, setResult] = useState<BuroProcessingResult | null>(null);
   const [activeTab, setActiveTab] = useState<'principal' | 'rechazos' | 'auditoria' | 'historial'>('principal');
@@ -542,7 +576,9 @@ export default function Buro() {
         useRefBase: useRefBase,
         enableGracePeriod: enableGracePeriod,
         gracePeriodDays: Number(gracePeriodDays) || 30,
-        allowDateYearPatch: allowDateYearPatch
+        allowDateYearPatch: allowDateYearPatch,
+        enableCarteraCastigada: enableCarteraCastigada,
+        dias_castigo: Number(diasCastigo) || 120
       });
 
       // If VBA Macro engine is active, execute the macro transformations
@@ -934,7 +970,7 @@ export default function Buro() {
         </div>
 
         {/* Panel de Políticas de Cartera y Tolerancia de Mora */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200 dark:border-neutral-700/60">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-2xl bg-neutral-50 dark:bg-neutral-800/40 border border-neutral-200 dark:border-neutral-700/60">
           {/* 1. Política de Tolerancia / Poner al Día */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -971,17 +1007,58 @@ export default function Buro() {
             </div>
             <p className="text-[11px] text-neutral-500 dark:text-neutral-400 leading-tight">
               {enableGracePeriod
-                ? `Clientes con mora ≤ ${gracePeriodDays} días reportarán $0.00 vencido y 0 días mora (saldo reclasificado a por vencer).`
-                : 'Desactivado: Se reportarán los días y valores de mora tal como constan en el archivo original.'}
+                ? `Clientes con mora ≤ ${gracePeriodDays} días reportarán $0.00 vencido y 0 días mora.`
+                : 'Desactivado: Se reportarán valores tal cual.'}
             </p>
           </div>
 
-          {/* 2. Control de Ajuste de Fecha de Vencimiento (Regla 3) */}
+          {/* 2. Cartera Castigada */}
+          <div className="space-y-2 border-t md:border-t-0 md:border-l border-neutral-200 dark:border-neutral-700/60 pt-3 md:pt-0 md:pl-4">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-neutral-800 dark:text-neutral-200 flex items-center gap-1.5 cursor-pointer">
+                <ShieldAlert className="w-4 h-4 text-rose-500" />
+                <span>Cartera Castigada</span>
+              </label>
+              <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-rose-600 dark:text-rose-400">
+                <input
+                  type="checkbox"
+                  checked={enableCarteraCastigada}
+                  onChange={(e) => handleEnableCarteraCastigadaChange(e.target.checked)}
+                  className="rounded border-neutral-300 text-rose-600 focus:ring-rose-500 w-3.5 h-3.5 cursor-pointer"
+                />
+                <span>Activar</span>
+              </label>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-neutral-600 dark:text-neutral-400 whitespace-nowrap">
+                Castigo a partir de:
+              </span>
+              <div className="relative w-28">
+                <input
+                  type="number"
+                  min={0}
+                  max={720}
+                  disabled={!enableCarteraCastigada}
+                  value={diasCastigo}
+                  onChange={(e) => handleDiasCastigoChange(parseInt(e.target.value, 10) || 0)}
+                  className="w-full px-2.5 py-1.5 rounded-xl text-xs font-bold border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100 focus:ring-2 focus:ring-rose-500 text-center disabled:opacity-50 shadow-sm"
+                />
+                <span className="absolute right-2.5 top-1.5 text-[11px] text-neutral-400 font-bold pointer-events-none">días</span>
+              </div>
+            </div>
+            <p className="text-[11px] text-neutral-500 dark:text-neutral-400 leading-tight">
+              {enableCarteraCastigada
+                ? `Mora ≥ ${diasCastigo} días será reclasificada a cartera castigada.`
+                : 'Desactivado: No se aplicará reclasificación automática.'}
+            </p>
+          </div>
+
+          {/* 3. Control de Ajuste de Fecha de Vencimiento (Regla 3) */}
           <div className="space-y-2 border-t md:border-t-0 md:border-l border-neutral-200 dark:border-neutral-700/60 pt-3 md:pt-0 md:pl-4">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-neutral-800 dark:text-neutral-200 flex items-center gap-1.5">
                 <Calendar className="w-4 h-4 text-amber-500" />
-                <span>Ajuste si Vencimiento &lt; Concesión (Regla 3)</span>
+                <span>Regla 3 (Ajuste Fecha)</span>
               </label>
               <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-amber-600 dark:text-amber-400">
                 <input
@@ -995,8 +1072,8 @@ export default function Buro() {
             </div>
             <p className="text-[11px] text-neutral-500 dark:text-neutral-400 leading-tight">
               {allowDateYearPatch
-                ? 'Activo: Si no existe coincidencia en la base de cotejo, se sumará 1 año automáticamente para conservar el registro en la cartera limpia.'
-                : 'Recomendado (Desactivado): Si una fecha de vencimiento es menor a concesión, se envía al Libro de Rechazos para revisión manual sin falsear el archivo limpio.'}
+                ? 'Activo: Si no coincide fecha, se sumará 1 año.'
+                : 'Desactivado: Se envía a Rechazos para revisión.'}
             </p>
           </div>
         </div>

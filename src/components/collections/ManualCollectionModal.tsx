@@ -7,6 +7,7 @@ import { useNotification } from '../../contexts/NotificationContext';
 import { logAudit, AuditAction } from '../../lib/audit';
 import { format } from 'date-fns';
 import { duplicateDetection } from '../../lib/duplicateDetection';
+import { handleFirestoreError, OperationType } from '../../lib/firestore-errors';
 
 export interface ManualCollectionData {
   id: string;
@@ -49,7 +50,7 @@ export function ManualCollectionModal({
 }: ManualCollectionModalProps) {
   const { user, profile } = useAuth();
   const { showToast, showConfirm } = useNotification();
-  const currentEnterpriseId = profile?.enterpriseId || user?.uid;
+  const currentEnterpriseId = (profile?.role === 'enterprise' ? user?.uid : profile?.enterpriseId) || user?.uid;
 
   const [formData, setFormData] = useState({
     employeeId: '',
@@ -119,13 +120,15 @@ export function ManualCollectionModal({
       setIsSubmitting(true);
       const targetEntId = currentEnterpriseId || user.uid;
 
-       // 1. Check for potential duplicate range for the same collector (only if receipts are used)
+       // 1. Check for potential duplicate for the same collector (only if receipts are used)
       if (!formData.noReceipt) {
         const isDuplicate = await duplicateDetection.checkCollection({
-          amount: totalColl,
-          reciboNumber: formData.initialReceipt,
-          createdBy: formData.employeeId,
-          date: formData.initialDate
+          enterpriseId: targetEntId,
+          employeeId: formData.employeeId,
+          initialReceipt: formData.initialReceipt.trim().toUpperCase(),
+          initialDate: formData.initialDate,
+          totalCollected: totalColl,
+          excludeId: editingCollection?.id
         });
 
         if (isDuplicate) {
@@ -146,8 +149,8 @@ export function ManualCollectionModal({
         initialDate: formData.initialDate,
         finalDate: formData.finalDate,
         noReceipt: formData.noReceipt,
-        initialReceipt: formData.noReceipt ? null : formData.initialReceipt.toUpperCase(),
-        finalReceipt: formData.noReceipt ? null : formData.finalReceipt.toUpperCase(),
+        initialReceipt: formData.noReceipt ? null : formData.initialReceipt.trim().toUpperCase(),
+        finalReceipt: formData.noReceipt ? null : formData.finalReceipt.trim().toUpperCase(),
         totalCollected: totalColl,
         depositsTransfers: depTrans,
         cashFinal: calculatedCashFinal,
@@ -174,7 +177,8 @@ export function ManualCollectionModal({
       onClose();
     } catch (err: any) {
       console.error('Error saving manual collection:', err);
-      showToast('Error al guardar la cobranza', 'error');
+      handleFirestoreError(err, editingCollection ? OperationType.UPDATE : OperationType.CREATE, 'collections');
+      showToast(`Error al guardar la cobranza: ${err?.message || 'Error desconocido'}`, 'error');
     } finally {
       setIsSubmitting(false);
     }

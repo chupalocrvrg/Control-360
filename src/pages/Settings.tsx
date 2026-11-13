@@ -1745,6 +1745,8 @@ export default function Settings() {
                     />
                   </div>
                 </div>
+                </div>
+
 
                 <div className="space-y-4 pt-8 border-t border-neutral-100 dark:border-neutral-800">
                   <div className="flex justify-between items-center">
@@ -1752,7 +1754,6 @@ export default function Settings() {
                     <button onClick={handleAddBank} className="px-3 py-1.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-xl font-bold text-xs hover:bg-blue-100 transition-all flex items-center gap-2">
                       <Plus className="w-4 h-4" /> Nuevo Banco
                     </button>
-
                   </div>
                   {(!settings.banks || settings.banks.length === 0) ? (
                     <p className="text-sm text-neutral-500 italic">No tienes entidades bancarias configuradas.</p>
@@ -1775,7 +1776,6 @@ export default function Settings() {
                     </div>
                   )}
                 </div>
-              </div>
             </section>
           )}
 

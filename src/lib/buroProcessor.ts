@@ -104,6 +104,8 @@ export interface BuroProcessorOptions {
   enableGracePeriod?: boolean;
   gracePeriodDays?: number;
   allowDateYearPatch?: boolean;
+  enableCarteraCastigada?: boolean;
+  dias_castigo?: number;
 }
 
 /**
@@ -958,30 +960,50 @@ export function processBuroFile(
     ? options.gracePeriodDays
     : 30;
 
+  // Cartera Castigada Configuration (from options)
+  const diasCastigo = typeof options.dias_castigo === 'number' ? options.dias_castigo : 120; // Default 120 days
+
   let gracePeriodCount = 0;
   let gracePeriodAmount = 0;
+  let carteraCastigadaCount = 0;
+  let carteraCastigadaAmount = 0;
 
-  if (enableGracePeriod && gracePeriodDays > 0) {
-    principalRecords.forEach(r => {
-      const currentDays = r.num_dias_vencido || 0;
-      const currentVencido = r.val_vencido || 0;
+  principalRecords.forEach(r => {
+    const currentDays = r.num_dias_vencido || 0;
+    const currentVencido = r.val_vencido || 0;
 
-      if (currentVencido > 0 && currentDays <= gracePeriodDays) {
-        gracePeriodCount++;
-        gracePeriodAmount += currentVencido;
+    // 1. Aplicar política de Tolerancia
+    if (enableGracePeriod && gracePeriodDays > 0 && currentVencido > 0 && currentDays <= gracePeriodDays) {
+      gracePeriodCount++;
+      gracePeriodAmount += currentVencido;
 
-        // Reclasificación contable: transferir vencido a por vencer para preservar deuda total
-        r.val_xvencer = parseNumberSafe(((r.val_xvencer || 0) + currentVencido).toFixed(2));
-        r.val_vencido = 0;
-        r.num_dias_vencido = 0;
-        if (r.num_cuotas_vencidas !== undefined) r.num_cuotas_vencidas = 0;
-        r.ESTADO_OPERACION = 'NORMAL';
-        r.mora_perdonada = true;
-        r.val_vencido_original = currentVencido;
-        r.dias_mora_original = currentDays;
-      }
-    });
-  }
+      // Reclasificación contable: transferir vencido a por vencer
+      r.val_xvencer = parseNumberSafe(((r.val_xvencer || 0) + currentVencido).toFixed(2));
+      r.val_vencido = 0;
+      r.num_dias_vencido = 0;
+      if (r.num_cuotas_vencidas !== undefined) r.num_cuotas_vencidas = 0;
+      r.ESTADO_OPERACION = 'NORMAL';
+      r.mora_perdonada = true;
+      r.val_vencido_original = currentVencido;
+      r.dias_mora_original = currentDays;
+    }
+    
+    // 2. Reclasificar Cartera Castigada (Si supera umbral de castigo)
+    // Se ejecuta sobre el estado actual (luego de perdonar mora si aplica)
+    const currentVencidoFinal = r.val_vencido || 0;
+    const currentDaysFinal = r.num_dias_vencido || 0;
+
+    if (options.enableCarteraCastigada && currentVencidoFinal > 0 && currentDaysFinal >= diasCastigo) {
+      carteraCastigadaCount++;
+      carteraCastigadaAmount += currentVencidoFinal;
+
+      // Mapeo: Mover de val_vencido a val_cart_castigada
+      r.val_cart_castigada = parseNumberSafe(((r.val_cart_castigada || 0) + currentVencidoFinal).toFixed(2));
+      r.val_vencido = 0;
+      r.es_cartera_castigada = true;
+      r.dias_mora_castigo = currentDaysFinal;
+    }
+  });
 
   // ----------------------------------------------------
   // FASE 9: ALINEACIÓN DE MOROSIDAD (PARA MORA RESTANTE > UMBRAL)
@@ -1006,6 +1028,9 @@ export function processBuroFile(
       enableGracePeriod && gracePeriodCount > 0
         ? `Se aplicó política de tolerancia y perdón a ${gracePeriodCount} clientes con mora <= ${gracePeriodDays} días (monto reclasificado: $ ${gracePeriodAmount.toLocaleString('es-EC', { minimumFractionDigits: 2 })}).`
         : 'Política de tolerancia: Sin registros aplicados.',
+      carteraCastigadaCount > 0
+        ? `Se reclasificaron ${carteraCastigadaCount} registros a CARTERA CASTIGADA (> ${diasCastigo} días) por un monto de $ ${carteraCastigadaAmount.toLocaleString('es-EC', { minimumFractionDigits: 2 })}.`
+        : 'Cartera Castigada: Sin registros detectados.',
       `Se alinearon ${morosityAlignedCount} registros con mora > ${gracePeriodDays} días donde existía monto vencido pero días de mora marcaban 0.`
     ]
   });

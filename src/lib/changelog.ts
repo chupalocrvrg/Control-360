@@ -11,6 +11,30 @@ export interface ChangelogRelease {
 
 export const staticChangelog: ChangelogRelease[] = [
   {
+    version: "5.60.5",
+    date: "2026-11-13",
+    changes: [
+      "Corrección de Permisos al Guardar Cobranzas Manuales: Se actualizó el servicio de detección de duplicados (collections, sales, credit_sales, checks) para filtrar por enterpriseId y cumplir con las reglas de seguridad de Firestore en cuentas no-admin.",
+      "Detección Precisa de Duplicados en Cobranza: La validación ahora compara Cobrador, Recibo Inicial (en mayúsculas), Fecha Inicial y Total Cobrado excluyendo el registro en edición, y muestra el detalle técnico en caso de error al guardar."
+    ]
+  },
+  {
+    version: "5.60.4",
+    date: "2026-11-12",
+    changes: [
+      "Configuración Local para Cartera Castigada: Se añadió un cuadro de configuración interactivo directamente en el módulo de 'Buró de Crédito' para definir el umbral (X días) de castigo, permitiendo mayor flexibilidad por cada proceso.",
+      "Optimización de Reportes: La reclasificación contable automática (val_vencido -> val_cart_castigada) ahora es totalmente configurable y se aplica tanto en la visualización del sistema como en la exportación del reporte final de Equifax."
+    ]
+  },
+  {
+    version: "5.60.3",
+    date: "2026-11-12",
+    changes: [
+      "Implementación de 'Cartera Castigada': Automatización del movimiento contable de valores vencidos a cartera castigada según umbral configurable en Ajustes.",
+      "Restricciones de Venta: Bloqueo automático para nuevas ventas a crédito a clientes con cartera castigada vigente y advertencias preventivas para clientes rehabilitados."
+    ]
+  },
+  {
     version: "5.60.2",
     date: "2026-11-11",
     changes: [

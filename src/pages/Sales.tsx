@@ -324,6 +324,7 @@ export default function Sales() {
       
       if (!editingSale) {
         const isDuplicate = await duplicateDetection.checkContadoSale({
+            enterpriseId: targetEnterpriseId,
             totalValue: saleData.totalValue,
             clientName: saleData.clientName,
             employeeId: saleData.employeeId,
@@ -366,6 +367,7 @@ export default function Sales() {
 
       // Validación de duplicados
       const isDuplicate = await duplicateDetection.checkCreditSale({
+          enterpriseId: targetEnterpriseId,
           grossTotal: creditSaleData.grossTotal,
           clientName: creditSaleData.clientName,
           sellerId: creditSaleData.sellerId,

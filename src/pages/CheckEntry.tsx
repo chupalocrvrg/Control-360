@@ -292,6 +292,7 @@ export default function CheckEntry() {
       }
       
       const isDuplicate = await duplicateDetection.checkCheck({
+        enterpriseId: getEnterpriseIdToSave(),
         beneficiaryName: formData.beneficiaryName,
         amount: installments[0],
         dueDate: format(new Date(formData.firstPaymentDate), 'yyyy-MM-dd')
